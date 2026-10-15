@@ -261,10 +261,23 @@ main { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative;
 
 /* 工具行与题目信息 */
 .toolrow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--color-neutral-700); margin-bottom: 4px; flex-wrap: wrap; }
-.info-toggle { background: none; border: 0; padding: 3px 4px; cursor: pointer; color: var(--color-neutral-700); font-size: 12px; text-align: left; border-radius: var(--radius-sm); }
-.info-toggle:hover { color: var(--color-accent-700); }
 .tagref { color: var(--color-accent-700); }
-.info { border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: 14px 16px; margin: 6px 0 14px; }
+
+/* 题目卡：标题下方展示题目要求，点击弹出编辑框 */
+.pinfo { margin: 14px 0 6px; padding: 8px 12px 10px 14px; border-left: 2px solid var(--color-accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; cursor: pointer; text-transform: none; letter-spacing: normal; }
+.pinfo:hover { background: color-mix(in srgb, var(--color-accent) 6%, transparent); }
+.pinfo-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-family: var(--font-body); font-size: 12px; color: var(--color-neutral-700); margin-bottom: 6px; }
+.pinfo-edit { display: inline-flex; align-items: center; gap: 4px; color: var(--color-accent-700); opacity: 0; transition: opacity .15s; }
+.pinfo:hover .pinfo-edit, .pinfo:focus-visible .pinfo-edit { opacity: 1; }
+.pinfo-text { font-family: var(--font-essay); font-size: 15px; line-height: 1.7; color: var(--color-neutral-800); white-space: pre-wrap; overflow-wrap: break-word; max-height: 17em; overflow: hidden; }
+.pinfo-text.open { max-height: none; }
+.pinfo-text.clipped { -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.pinfo-text.empty { font-style: italic; color: var(--color-neutral-600); }
+.pinfo-more { font-family: var(--font-body); font-size: 12px; margin-top: 2px; }
+.pinfo-img { display: block; max-height: 160px; width: auto; max-width: 100%; margin-top: 8px; }
+.dialog.dialog-wide { width: min(720px, 100%); }
+.prompt-ta { font-family: var(--font-essay); font-size: 14.5px; }
+@media (hover: none) { .pinfo-edit { opacity: 1; } }
 .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
 .info-grid .wide { grid-column: 1 / -1; }
 .img-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -280,7 +293,7 @@ main { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative;
 .col-head.l { text-align: right; color: var(--color-accent-700); }
 .col-head.r { color: var(--color-neutral-700); }
 .col-head.c { text-transform: none; letter-spacing: normal; }
-.title-input { width: 100%; font-family: var(--font-heading); font-weight: 400; font-size: 32px; line-height: 1.15; letter-spacing: -0.015em; border: 0; border-bottom: 1px solid transparent; background: none; color: var(--color-text); padding: 2px 0; }
+.title-input { display: block; resize: none; overflow: hidden; width: 100%; font-family: var(--font-heading); font-weight: 400; font-size: 32px; line-height: 1.15; letter-spacing: -0.015em; border: 0; border-bottom: 1px solid transparent; background: none; color: var(--color-text); padding: 2px 0; }
 .title-input:hover { border-bottom-color: var(--color-divider); }
 .title-input:focus { border-bottom-color: var(--color-accent); outline: none; }
 .wc { font-family: var(--font-body); font-size: 12px; color: var(--color-neutral-600); margin-top: 4px; font-variant-numeric: tabular-nums; }

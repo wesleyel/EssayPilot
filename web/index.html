@@ -54,7 +54,6 @@
     <div class="sheet">
       <div id="scorebar" class="scorebar"></div>
       <div class="toolrow">
-        <button id="info-toggle" class="info-toggle" aria-controls="info"></button>
         <span class="sp"></span>
         <button id="edit-toggle" class="btn btn-secondary btn-sm" hidden></button>
         <span class="muted xsmall">边注</span>
@@ -62,10 +61,9 @@
           <button class="seg-btn" id="expand-all" aria-pressed="false" title="展开全部边注的完整内容">全部展开</button>
         </div>
       </div>
-      <div id="info" class="info" hidden></div>
       <div class="desk" id="desk">
         <div class="col-head l" id="head-l">重点</div>
-        <div class="col-head c"><input id="title" class="title-input" aria-label="标题" placeholder="未命名"><div class="wc" id="wc"></div></div>
+        <div class="col-head c"><textarea id="title" class="title-input" rows="1" aria-label="标题" placeholder="未命名"></textarea><div class="wc" id="wc"></div><div id="info" class="pinfo" role="button" tabindex="0" aria-label="题目信息，点击编辑" title="点击编辑题目信息"></div></div>
         <div class="col-head r" id="head-r">问题</div>
         <div class="margin l" id="mL"></div>
         <div class="center">

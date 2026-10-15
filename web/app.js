@@ -35,12 +35,11 @@ const S = {
   expanded: new Set(),
   pending: null,
   lastSel: null,
-  infoOpen: false,
+  promptOpen: false,
   scoreOpen: false,
   activity: [],
   ui: null,
   saveState: '',
-  pendingType: null,
   pendingPin: null,
   hl: { items: [], loaded: false, q: '', subj: '', group: store.get('hlGroup', 'category'), collapsed: new Set() },
 };
@@ -131,7 +130,7 @@ function applyDetail(d) {
     S.pinnedId = S.hotId = S.caretId = null;
     if (S.pendingPin && d.annotations.some((a) => a.id === S.pendingPin)) S.pinnedId = S.pendingPin;
     S.expanded.clear();
-    S.pendingType = null;
+    S.promptOpen = false;
   } else {
     const local = editor.value;
     if (local === d.essay.content || local === S.serverContent) {
@@ -439,7 +438,7 @@ function renderAll() {
   renderScorebar();
   renderInfo();
   const t = $('#title');
-  if (document.activeElement !== t) t.value = d.essay.title;
+  if (document.activeElement !== t) { t.value = d.essay.title; fitTitle(); }
   renderWordCount();
   renderMarks();
   if (S.view === 'versions') renderVersionsView();
@@ -510,68 +509,100 @@ function renderWordCount() {
   setSaveState(S.saveState);
 }
 
+// 标题可能很长：textarea 随内容增高。
+function fitTitle() {
+  const t = $('#title');
+  t.style.height = 'auto';
+  t.style.height = t.scrollHeight + 'px';
+}
+
+// 标题下方的题目卡：题型、分类、标签与题目要求；点击弹出编辑框。
 function renderInfo() {
-  const d = S.detail;
-  const e = d.essay;
+  const e = S.detail.essay;
   const spec = typeSpec(e.type);
-  $('#info-toggle').innerHTML = `${S.infoOpen ? '▾' : '▸'} 题目信息 · ${esc(SUBJECT_LABEL[e.subject])} · ${esc(spec ? spec.shortLabel || spec.label : e.type)}${e.category ? ' · ' + esc(e.category) : ''} ${e.tags.map((t) => `<span class="tagref">#${esc(t)}</span>`).join(' ')}`;
-  $('#info-toggle').setAttribute('aria-expanded', S.infoOpen);
   const box = $('#info');
-  box.hidden = !S.infoOpen;
-  if (!S.infoOpen) { box.dataset.for = ''; return; }
-  if (box.dataset.for === e.id + e.updatedAt && box.contains(document.activeElement)) return;
-  box.dataset.for = e.id + e.updatedAt;
+  const prompt = e.prompt.trim();
+  box.innerHTML = `<div class="pinfo-meta"><span>${esc(SUBJECT_LABEL[e.subject])} · ${esc(spec ? spec.label : e.type)}${e.category ? ' · ' + esc(e.category) : ''}</span>
+      ${e.tags.map((t) => `<span class="tagref">#${esc(t)}</span>`).join(' ')}<span class="sp"></span><span class="pinfo-edit">${icon('pen', 13)} 编辑</span></div>
+    <div class="pinfo-text${prompt ? '' : ' empty'}${S.promptOpen ? ' open' : ''}">${prompt ? esc(prompt) : '还没有题目要求，点击添加'}</div>
+    <button class="lnk pinfo-more" hidden></button>
+    ${e.promptImage ? `<img class="plate pinfo-img" src="${esc(e.promptImage)}" alt="题目图片">` : ''}`;
+  const text = box.querySelector('.pinfo-text');
+  const more = box.querySelector('.pinfo-more');
+  const clipped = text.scrollHeight > text.clientHeight + 2;
+  if (S.promptOpen || clipped) {
+    more.hidden = false;
+    more.textContent = S.promptOpen ? '收起 ▴' : '展开全文 ▾';
+    text.classList.toggle('clipped', clipped && !S.promptOpen);
+  }
+}
+
+function editInfoDialog() {
+  const e = S.detail.essay;
   const types = S.meta.types.filter((t) => t.subject === e.subject);
-  const curType = S.pendingType || e.type;
-  const cats = typeSpec(curType)?.categories || [];
-  box.innerHTML = `<div class="info-grid">
-    <div class="field"><label for="f-type">题型</label><select id="f-type" class="input">${types.map((t) => `<option value="${t.id}"${t.id === curType ? ' selected' : ''}>${esc(t.label)}</option>`).join('')}</select></div>
-    ${cats.length ? `<div class="field"><label for="f-cat">分类${S.pendingType ? '（请选择以完成题型切换）' : ''}</label><select id="f-cat" class="input${S.pendingType ? ' need' : ''}">${S.pendingType ? '<option value="">请选择</option>' : ''}${cats.map((c) => `<option${c === e.category && !S.pendingType ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div>` : ''}
-    <div class="field wide"><label>主题标签</label><div id="f-tags"></div></div>
-    <div class="field wide"><label for="f-prompt">题目要求</label><textarea id="f-prompt" class="input" rows="4" placeholder="粘贴题目要求；也可以直接粘贴题目图片">${esc(e.prompt)}</textarea></div>
-    <div class="field wide"><label>题目图片</label><div class="img-row">${e.promptImage ? `<img class="plate prompt-img" src="${esc(e.promptImage)}" alt="题目图片">` : '<span class="muted small">无</span>'}
-      <label class="btn btn-secondary btn-sm">${icon('image', 14)} 选择图片<input type="file" accept="image/*" id="f-img" hidden></label>
-      ${e.promptImage ? '<button class="btn btn-ghost btn-sm" id="f-img-del">删除图片</button>' : ''}<span class="muted xsmall">也可在题目要求框内粘贴</span></div></div>
-  </div>`;
-  const patchEssay = async (body) => {
-    try {
-      const nd = await API.patch(`/essays/${S.id}`, body);
-      applyDetail(nd);
-      refreshListSoon();
-    } catch (err) { errToast(err); box.dataset.for = ''; renderInfo(); }
+  let image = e.promptImage || '';
+  const d = openDialog('编辑题目信息', `<form class="new-form" id="info-form">
+      <div class="info-grid">
+        <div class="field"><label for="f-type">题型</label><select id="f-type" class="input">${types.map((t) => `<option value="${t.id}"${t.id === e.type ? ' selected' : ''}>${esc(t.label)}</option>`).join('')}</select></div>
+        <div class="field" id="f-cat-f"><label for="f-cat">分类</label><select id="f-cat" class="input"></select></div>
+        <div class="field wide"><label>主题标签（至少一个）</label><div id="f-tags"></div></div>
+        <div class="field wide"><label for="f-prompt">题目要求</label><textarea id="f-prompt" class="input prompt-ta" rows="10" placeholder="粘贴题目要求；也可以直接粘贴题目图片">${esc(e.prompt)}</textarea></div>
+        <div class="field wide"><label>题目图片</label><div class="img-row" id="f-img-row"></div></div>
+      </div>
+      <div class="form-err" id="f-err"></div></form>`,
+  '<button class="btn btn-secondary" data-r="0">取消</button><button class="btn btn-primary" data-r="1">保存</button>');
+  const el = d.el;
+  el.querySelector('.dialog').classList.add('dialog-wide');
+  const fillCats = (keep) => {
+    const cats = typeSpec(el.querySelector('#f-type').value)?.categories || [];
+    el.querySelector('#f-cat-f').hidden = !cats.length;
+    el.querySelector('#f-cat').innerHTML = (cats.includes(keep) ? '' : '<option value="">请选择</option>') + cats.map((c) => `<option${c === keep ? ' selected' : ''}>${esc(c)}</option>`).join('');
   };
-  $('#f-type').addEventListener('change', (ev) => {
-    const t = ev.target.value;
-    const c = typeSpec(t)?.categories || [];
-    if (!c.length) { S.pendingType = null; patchEssay({ type: t, category: '' }); }
-    else if (c.includes(e.category)) { S.pendingType = null; patchEssay({ type: t }); }
-    else { S.pendingType = t === e.type ? null : t; box.dataset.for = ''; renderInfo(); }
-  });
-  $('#f-cat')?.addEventListener('change', (ev) => {
-    if (!ev.target.value) return;
-    const body = { category: ev.target.value };
-    if (S.pendingType) body.type = S.pendingType;
-    S.pendingType = null;
-    patchEssay(body);
-  });
-  tagInput($('#f-tags'), e.tags, (tags) => {
-    if (!tags.length) { toast('至少保留一个主题标签', 'err'); return; }
-    patchEssay({ tags });
-  });
-  const pr = $('#f-prompt');
-  pr.addEventListener('change', () => patchEssay({ prompt: pr.value }));
-  pr.addEventListener('paste', async (ev) => {
+  const renderImg = () => {
+    el.querySelector('#f-img-row').innerHTML = `${image ? `<img class="plate prompt-img" src="${esc(image)}" alt="题目图片">` : '<span class="muted small">无</span>'}
+      <label class="btn btn-secondary btn-sm">${icon('image', 14)} 选择图片<input type="file" accept="image/*" id="f-img" hidden></label>
+      ${image ? '<button type="button" class="btn btn-ghost btn-sm" id="f-img-del">删除图片</button>' : ''}<span class="muted xsmall">也可在题目要求框内粘贴</span>`;
+  };
+  const setImage = async (f) => {
+    try { image = await compressImage(f); renderImg(); } catch (err) { errToast(err); }
+  };
+  fillCats(e.category);
+  renderImg();
+  const tags = tagInput(el.querySelector('#f-tags'), e.tags, null);
+  el.querySelector('#f-type').addEventListener('change', () => fillCats(el.querySelector('#f-cat').value || e.category));
+  el.querySelector('#f-img-row').addEventListener('change', (ev) => { if (ev.target.id === 'f-img' && ev.target.files[0]) setImage(ev.target.files[0]); });
+  el.querySelector('#f-img-row').addEventListener('click', (ev) => { if (ev.target.closest('#f-img-del')) { image = ''; renderImg(); } });
+  const pr = el.querySelector('#f-prompt');
+  pr.addEventListener('paste', (ev) => {
     const f = [...(ev.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
     if (!f) return;
     ev.preventDefault();
-    try { patchEssay({ promptImage: await compressImage(f) }); } catch (err) { errToast(err); }
+    setImage(f);
   });
-  $('#f-img').addEventListener('change', async (ev) => {
-    const f = ev.target.files[0];
-    if (!f) return;
-    try { patchEssay({ promptImage: await compressImage(f) }); } catch (err) { errToast(err); }
+  el.querySelector('[data-r="0"]').addEventListener('click', d.close);
+  el.querySelector('[data-r="1"]').addEventListener('click', async () => {
+    const err = el.querySelector('#f-err');
+    const type = el.querySelector('#f-type').value;
+    const cats = typeSpec(type)?.categories || [];
+    const category = cats.length ? el.querySelector('#f-cat').value : '';
+    const t = tags.get();
+    if (cats.length && !category) { err.textContent = '请选择分类'; return; }
+    if (!t.length) { err.textContent = '请至少保留一个主题标签'; return; }
+    const body = {};
+    if (type !== e.type) body.type = type;
+    if (category !== e.category) body.category = category;
+    if (t.join('\n') !== e.tags.join('\n')) body.tags = t;
+    if (pr.value !== e.prompt) body.prompt = pr.value;
+    if (image !== (e.promptImage || '')) body.promptImage = image;
+    if (!Object.keys(body).length) { d.close(); return; }
+    try {
+      applyDetail(await API.patch(`/essays/${S.id}`, body));
+      refreshListSoon();
+      d.close();
+      toast('已保存题目信息');
+    } catch (ex) { err.textContent = ex.message; }
   });
-  $('#f-img-del')?.addEventListener('click', () => patchEssay({ promptImage: '' }));
+  pr.focus();
 }
 
 let prevTops = new Map();
@@ -1085,7 +1116,12 @@ function bind() {
     openDrawer(!narrowMQ.matches && store.get('drawer', 'closed') === 'open', { focus: false });
     if (S.detail) renderMarks();
   });
-  $('#info-toggle').addEventListener('click', () => { S.infoOpen = !S.infoOpen; renderInfo(); });
+  $('#info').addEventListener('click', (e) => {
+    if (e.target.closest('.pinfo-more')) { S.promptOpen = !S.promptOpen; renderInfo(); return; }
+    if (window.getSelection()?.toString()) return; // 允许选中复制题目
+    editInfoDialog();
+  });
+  $('#info').addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.id === 'info') { e.preventDefault(); editInfoDialog(); } });
   $('#scorebar').addEventListener('click', (e) => {
     if (e.target.closest('#sb-toggle')) { S.scoreOpen = !S.scoreOpen; renderScorebar(); }
   });
@@ -1096,6 +1132,10 @@ function bind() {
   };
   title.addEventListener('blur', saveTitle);
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); title.blur(); } });
+  title.addEventListener('input', fitTitle);
+  // 首次渲染时栏宽可能还没定下来：宽度一变就重新量高度（只看宽度，避免改高度时自触发）。
+  let titleW = 0;
+  new ResizeObserver(() => { if (title.clientWidth && title.clientWidth !== titleW) { titleW = title.clientWidth; fitTitle(); } }).observe(title);
 
   $('#versions').addEventListener('change', (e) => {
     const s = e.target.closest('select[data-pick]');
