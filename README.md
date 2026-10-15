@@ -16,9 +16,17 @@
 
 ## 开始使用
 
-需要 Go 1.26 及以上。
+用 Homebrew（macOS / Linux）安装，并作为后台服务运行：
 
 ```bash
+brew install wesleyel/tap/essaypilot
+brew services start essaypilot
+```
+
+也可以从源码运行（需要 Go 1.26 及以上），或在 [Releases](https://github.com/wesleyel/EssayPilot/releases) 下载对应平台的程序：
+
+```bash
+git clone https://github.com/wesleyel/EssayPilot && cd EssayPilot
 go install ./cmd/essaypilot
 essaypilot -mcp
 ```
