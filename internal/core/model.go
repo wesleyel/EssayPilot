@@ -1,4 +1,6 @@
-package main
+// Package core 是 EssayPilot 的领域与业务层：题型规则、阅卷细则、SQLite 存储、标注锚定和 Service。
+// HTTP、MCP 等传输层都只调用 Service。
+package core
 
 // 科目、题型、分类、评分维度与标注的领域规则。
 // 所有"按科目/题型分支"的数据都集中在这里查表，其余代码不写 if/else。
@@ -46,7 +48,7 @@ var Types = []TypeSpec{
 	{"dangdai", Politics, "38题 当代", "38题·当代", "当代世界经济与政治 (第38题·当代)", 10, 350, 450, []string{}},
 }
 
-func typeSpec(id string) (TypeSpec, bool) {
+func LookupType(id string) (TypeSpec, bool) {
 	for _, t := range Types {
 		if t.ID == id {
 			return t, true
@@ -123,7 +125,7 @@ func countWords(text string, subject Subject) int {
 	return cjk + rest
 }
 
-func lengthUnit(subject Subject) string {
+func LengthUnit(subject Subject) string {
 	if subject == English {
 		return "词"
 	}
@@ -155,7 +157,7 @@ var Dimensions = map[Subject]map[string]DimensionSpec{
 	},
 }
 
-func dimensionMax(subject Subject, maxScore float64, key string) float64 {
+func DimensionMax(subject Subject, maxScore float64, key string) float64 {
 	return math.Round(Dimensions[subject][key].Weight*maxScore*10) / 10
 }
 

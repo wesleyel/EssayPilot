@@ -1,4 +1,4 @@
-package main
+package core
 
 // 阅卷细则。服务端不调用模型：这些文本通过 MCP 的 get_rubric / prompts
 // 交给本地 Agent，由 Agent 评分后调用 submit_evaluation 写回。
@@ -62,7 +62,7 @@ func dimensionRubric(spec TypeSpec) string {
 	var b strings.Builder
 	for _, key := range DimensionKeys {
 		d := Dimensions[spec.Subject][key]
-		fmt.Fprintf(&b, "- dimensions.%s（%s，满分 %g）：%s\n", key, d.Label, dimensionMax(spec.Subject, spec.MaxScore, key), d.Criteria)
+		fmt.Fprintf(&b, "- dimensions.%s（%s，满分 %g）：%s\n", key, d.Label, DimensionMax(spec.Subject, spec.MaxScore, key), d.Criteria)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -75,9 +75,9 @@ func correctionKindList(subject Subject) string {
 	return strings.Join(parts, "、")
 }
 
-// rubric 返回某题型完整的阅卷细则，供 Agent 评分时遵循。
-func rubric(spec TypeSpec) string {
-	unit := lengthUnit(spec.Subject)
+// Rubric 返回某题型完整的阅卷细则，供 Agent 评分时遵循。
+func Rubric(spec TypeSpec) string {
+	unit := LengthUnit(spec.Subject)
 	submit := fmt.Sprintf(`【提交方式】评完后调用 submit_evaluation：
 - score 为总分（满分 %g），四个维度 dimensions.{%s} 各含 score 与 feedback，维度得分之和必须等于 score，且每个维度不超过自己的满分。
 - band 写档次（如 第四档 / 高分档）；overallComment 约 200 字考官总评；strengths / weaknesses 各写具体条目。

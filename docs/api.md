@@ -2,7 +2,7 @@
 
 EssayPilot 对外有三类接口：给 Agent 用的 **MCP**（`/mcp`，需用 `-mcp` 开启），给界面用的 **REST + SSE**（`/api`），以及页面向浏览器 Agent 注册的 **WebMCP** 工具。三者底层共用同一套业务逻辑，所以无论通过哪一类接口改动数据，界面都会实时刷新。
 
-JSON 形状见 [`types.go`](../types.go)，枚举（科目、题型、分类、维度、纠错类别、标注类型）见 [`model.go`](../model.go)。
+JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（科目、题型、分类、维度、纠错类别、标注类型）见 [`internal/core/model.go`](../internal/core/model.go)。
 
 ## 约定
 

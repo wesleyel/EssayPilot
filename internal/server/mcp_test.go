@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/wesleyel/essay-eval/internal/core"
 )
 
-func newTestMCP(t *testing.T) (*Service, *mcp.ClientSession) {
+func newTestMCP(t *testing.T) (*core.Service, *mcp.ClientSession) {
 	t.Helper()
-	s, err := NewService(":memory:")
+	s, err := core.NewService(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestMCPFlow(t *testing.T) {
 	}
 	call(t, cs, "submit_evaluation", eval, nil, true) // content 满分 5，8 超限
 	eval["dimensions"] = dims(4, 4, 3, 2)
-	var er EvaluationResult
+	var er core.EvaluationResult
 	call(t, cs, "submit_evaluation", eval, &er, false)
 	if er.Evaluation.Score != 13 || er.Evaluation.MaxScore != 20 || er.Version.ID == "" || len(er.Corrections) != 1 || er.Corrections[0].Annotation == nil {
 		t.Fatalf("submit_evaluation: %+v", er)
@@ -130,15 +131,15 @@ func TestMCPFlow(t *testing.T) {
 	if got.Essay.Content != applied.Essay.Content {
 		t.Errorf("get_essay content mismatch")
 	}
-	byQuote := map[string]Annotation{}
+	byQuote := map[string]core.Annotation{}
 	for _, a := range got.Annotations {
 		byQuote[a.Quote] = a
 	}
-	if a := byQuote["realise"]; a.Status != StatusResolved {
+	if a := byQuote["realise"]; a.Status != core.StatusResolved {
 		t.Errorf("applied annotation status = %q", a.Status)
 	}
 	good, ok := byQuote["take exercise every day"]
-	if !ok || good.Status != StatusOpen {
+	if !ok || good.Status != core.StatusOpen {
 		t.Fatalf("good annotation lost: %+v", got.Annotations)
 	}
 	if got.Essay.Content[good.Start:good.End] != good.Quote { // 纯 ASCII：UTF-16 偏移即字节偏移
@@ -152,11 +153,11 @@ func TestMCPFlow(t *testing.T) {
 	}
 
 	// reply：回复用户的疑问
-	q, err := s.Annotate("user", id, []AnnotateItem{{Quote: "In my opinion", Kind: "question", Note: "这个开头会不会太俗？"}})
+	q, err := s.Annotate("user", id, []core.AnnotateItem{{Quote: "In my opinion", Kind: "question", Note: "这个开头会不会太俗？"}})
 	if err != nil || q[0].Annotation == nil {
 		t.Fatalf("user annotate: %v %+v", err, q)
 	}
-	var rep Annotation
+	var rep core.Annotation
 	call(t, cs, "reply", map[string]any{"annotation_id": q[0].Annotation.ID, "note": "可以换成 From my perspective"}, &rep, false)
 	if rep.ParentID == nil || *rep.ParentID != q[0].Annotation.ID || rep.EssayID != id {
 		t.Errorf("reply = %+v", rep)
@@ -175,7 +176,7 @@ func TestMCPFlow(t *testing.T) {
 	}
 
 	// get_ui_context
-	s.SetUIContext(UIContext{EssayID: id, SelectionStart: 0, SelectionEnd: 8, SelectionText: "Nowadays"})
+	s.SetUIContext(core.UIContext{EssayID: id, SelectionStart: 0, SelectionEnd: 8, SelectionText: "Nowadays"})
 	var ui uiContextOut
 	call(t, cs, "get_ui_context", map[string]any{}, &ui, false)
 	if ui.EssayID != id || ui.Title != "Health" || ui.SelectionText != "Nowadays" {
@@ -241,25 +242,25 @@ func TestMCPFlow(t *testing.T) {
 }
 
 func TestPromptText(t *testing.T) {
-	d := EssayDetail{Essay: Essay{ID: "e1", Subject: Politics, Type: "mayuan", Title: "矛盾", Prompt: "结合材料说明", Content: "①矛盾是事物发展的动力。"}}
-	for _, name := range PromptNames {
-		text, err := promptText(name, d)
+	d := core.EssayDetail{Essay: core.Essay{ID: "e1", Subject: core.Politics, Type: "mayuan", Title: "矛盾", Prompt: "结合材料说明", Content: "①矛盾是事物发展的动力。"}}
+	for _, name := range core.PromptNames {
+		text, err := core.PromptText(name, d)
 		if err != nil || !strings.Contains(text, "e1") || !strings.Contains(text, "①矛盾是事物发展的动力。") {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := promptText("nope", d); err == nil {
+	if _, err := core.PromptText("nope", d); err == nil {
 		t.Error("unknown prompt should fail")
 	}
 }
 
 func TestMCPHTTP(t *testing.T) {
-	s, err := NewService(":memory:")
+	s, err := core.NewService(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if _, err := s.CreateEssay("user", CreateEssayInput{Subject: Politics, Type: "mayuan", Tags: []string{"矛盾"}, Content: "答"}); err != nil {
+	if _, err := s.CreateEssay("user", core.CreateEssayInput{Subject: core.Politics, Type: "mayuan", Tags: []string{"矛盾"}, Content: "答"}); err != nil {
 		t.Fatal(err)
 	}
 	ts := httptest.NewServer(newMCPHandler(s))

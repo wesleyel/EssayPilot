@@ -1,71 +1,34 @@
-// EssayPilot：考研作文批阅工作台。单个二进制，数据存一个 SQLite 文件。
-// 服务端不调用模型；评分、润色由本地 Agent 经 MCP（/mcp）或浏览器 WebMCP 完成。
-package main
+// Package server 把业务层以 HTTP 暴露：REST + SSE（/api）、MCP（/mcp）和前端静态文件。
+package server
 
 import (
 	"crypto/subtle"
-	"embed"
-	"flag"
 	"fmt"
 	"html"
 	"io/fs"
-	"log"
-	"net"
 	"net/http"
-	"os"
 	"strings"
+
+	"github.com/wesleyel/essay-eval/internal/core"
 )
 
-//go:embed web
-var webFS embed.FS
-
-func main() {
-	addr := flag.String("addr", "127.0.0.1:8790", "监听地址")
-	dbPath := flag.String("db", "essaypilot.db", "SQLite 数据文件")
-	mcpOn := flag.Bool("mcp", false, "开启 MCP（Streamable HTTP，路径 /mcp）")
-	token := flag.String("token", os.Getenv("ESSAYPILOT_TOKEN"), "访问令牌（Bearer）；监听非本机地址时必填，也可用环境变量 ESSAYPILOT_TOKEN")
-	trial := flag.String("webmcp-token", "", "Chrome WebMCP origin trial 令牌（可选）")
-	webDir := flag.String("web", "", "开发用：从该目录读取前端，代替内嵌文件")
-	flag.Parse()
-
-	if !loopback(*addr) && *token == "" {
-		log.Fatalf("监听 %s 不是本机地址，请用 -token 设置访问令牌", *addr)
-	}
-
-	svc, err := NewService(*dbPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer svc.Close()
-
-	mux := http.NewServeMux()
-	mux.Handle("/api/", newAPI(svc, APIOptions{MCPEnabled: *mcpOn, MCPPath: "/mcp", WebMCP: true}))
-	if *mcpOn {
-		mux.Handle("/mcp", newMCPHandler(svc))
-	}
-	sub, _ := fs.Sub(webFS, "web")
-	if *webDir != "" {
-		sub = os.DirFS(*webDir)
-	}
-	mux.Handle("/", staticHandler(sub, *trial))
-
-	log.Printf("EssayPilot  http://%s", *addr)
-	if *mcpOn {
-		log.Printf("MCP         http://%s/mcp", *addr)
-	}
-	log.Fatal(http.ListenAndServe(*addr, withToken(*token, mux)))
+// Options 是 HTTP 服务的开关。
+type Options struct {
+	MCP         bool   // 开启 /mcp
+	Token       string // 访问令牌；空表示不校验
+	WebMCPToken string // Chrome WebMCP origin trial 令牌
+	Web         fs.FS  // 前端文件，根目录下有 index.html
 }
 
-func loopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return false
+// New 组装完整的 HTTP 处理器。
+func New(s *core.Service, o Options) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/api/", newAPI(s, APIOptions{MCPEnabled: o.MCP, MCPPath: "/mcp", WebMCP: true}))
+	if o.MCP {
+		mux.Handle("/mcp", newMCPHandler(s))
 	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	mux.Handle("/", staticHandler(o.Web, o.WebMCPToken))
+	return withToken(o.Token, mux)
 }
 
 // staticHandler 提供内嵌前端；index.html 里的占位注释替换为 origin-trial meta。

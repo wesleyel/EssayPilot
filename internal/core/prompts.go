@@ -1,4 +1,4 @@
-package main
+package core
 
 // MCP prompts 与界面“复制 prompt”按钮共用的提示词。
 // 生成的文本要能独立使用：贴进任何接了 essaypilot MCP 的 Agent 都能照做。
@@ -11,16 +11,16 @@ import (
 // PromptNames 是支持的提示词名称，顺序即展示顺序。
 var PromptNames = []string{"grade_essay", "polish_essay", "review_my_marks"}
 
-var promptDescriptions = map[string]string{
+var PromptDescriptions = map[string]string{
 	"grade_essay":     "按考研阅卷细则给这篇作答评分、纠错、写润色稿，并通过 submit_evaluation 写回",
 	"polish_essay":    "只润色不打分：以纠错边注（可一键采纳）的形式给出最小必要修改",
 	"review_my_marks": "逐条回应用户自己在正文上做的标记：回答疑问、对问题给出纠错建议",
 }
 
-// promptText 生成指定提示词的完整文本。
-func promptText(name string, d EssayDetail) (string, error) {
+// PromptText 生成指定提示词的完整文本。
+func PromptText(name string, d EssayDetail) (string, error) {
 	e := d.Essay
-	spec, ok := typeSpec(e.Type)
+	spec, ok := LookupType(e.Type)
 	if !ok {
 		return "", &ValidationError{Msg: fmt.Sprintf("未知题型：%s", e.Type)}
 	}
@@ -34,7 +34,7 @@ func promptText(name string, d EssayDetail) (string, error) {
 2. 对照下方阅卷细则（也可调用 get_rubric(essay_id="%[1]s") 获取）逐维评分，确定档次。
 3. 调用 submit_evaluation(essay_id="%[1]s", ...) 一次性提交：score、band、dimensions 四维（content/language/structure/convention，各含 score 与 feedback）、overall_comment、strengths、weaknesses、polished、corrections。四维之和必须等于 score，每维不超过自己的满分；被拒时按错误信息修正后重新提交。
 4. 如有值得单独指出的亮点或问题，可再调用 annotate 补充 good / issue 边注（quote 必须逐字摘自正文）。`, e.ID)
-		guide = "【阅卷细则】\n" + rubric(spec)
+		guide = "【阅卷细则】\n" + Rubric(spec)
 	case "polish_essay":
 		steps = fmt.Sprintf(`请润色 EssayPilot 中的作答（essay_id = %[1]s），只改不打分。服务端不调用模型，润色由你完成，再用 essaypilot MCP 工具写回。
 
@@ -65,11 +65,11 @@ func promptText(name string, d EssayDetail) (string, error) {
 func essayInfoText(spec TypeSpec, e Essay) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "【作答信息】\n- essay_id：%s\n- 标题：%s\n- 题型：%s（满分 %g，字数要求 %d~%d %s）\n",
-		e.ID, e.Title, spec.Label, spec.MaxScore, spec.MinLength, spec.MaxLength, lengthUnit(spec.Subject))
+		e.ID, e.Title, spec.Label, spec.MaxScore, spec.MinLength, spec.MaxLength, LengthUnit(spec.Subject))
 	if e.Category != "" {
 		fmt.Fprintf(&b, "- 分类：%s\n", e.Category)
 	}
-	fmt.Fprintf(&b, "- 当前字数：%d %s\n", e.WordCount, lengthUnit(spec.Subject))
+	fmt.Fprintf(&b, "- 当前字数：%d %s\n", e.WordCount, LengthUnit(spec.Subject))
 	prompt := strings.TrimSpace(e.Prompt)
 	if prompt == "" {
 		prompt = "（未填写）"

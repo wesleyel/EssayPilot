@@ -1,4 +1,4 @@
-package main
+package core
 
 // SQLite 存储：建表、行与实体的互转。业务规则在 service.go。
 

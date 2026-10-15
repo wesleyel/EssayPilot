@@ -1,6 +1,6 @@
-package main
+package core
 
-// Service：题目、版本、评分、标注的全部业务规则。REST（api.go）与 MCP（mcp.go）共用。
+// Service：题目、版本、评分、标注的全部业务规则。REST 与 MCP（internal/server）共用。
 // 写操作由 mu 串行化；每次写操作成功后广播对应 Event。
 
 import (
@@ -21,12 +21,12 @@ type ValidationError struct{ Msg string }
 
 func (e *ValidationError) Error() string { return e.Msg }
 
-func validationf(format string, args ...any) error {
+func Validationf(format string, args ...any) error {
 	return &ValidationError{Msg: fmt.Sprintf(format, args...)}
 }
 
-// invalid 把 model.go 里的普通校验错误转成 ValidationError。
-func invalid(err error) error {
+// Invalid 把 model.go 里的普通校验错误转成 ValidationError。
+func Invalid(err error) error {
 	if err == nil {
 		return nil
 	}
@@ -148,20 +148,20 @@ func cleanTitle(t string) string {
 
 func cleanTags(tags []string) ([]string, error) {
 	tags = normalizeTags(tags)
-	return tags, invalid(tagsError(tags))
+	return tags, Invalid(tagsError(tags))
 }
 
 func (s *Service) CreateEssay(actor string, in CreateEssayInput) (EssayDetail, error) {
 	if !validSubject(in.Subject) {
-		return EssayDetail{}, validationf("科目无效：%q（可选 english / politics）", in.Subject)
+		return EssayDetail{}, Validationf("科目无效：%q（可选 english / politics）", in.Subject)
 	}
-	spec, ok := typeSpec(in.Type)
+	spec, ok := LookupType(in.Type)
 	if !ok || spec.Subject != in.Subject {
-		return EssayDetail{}, validationf("题型 %q 不属于科目 %s", in.Type, in.Subject)
+		return EssayDetail{}, Validationf("题型 %q 不属于科目 %s", in.Type, in.Subject)
 	}
 	category := strings.TrimSpace(in.Category)
 	if err := categoryError(spec, category); err != nil {
-		return EssayDetail{}, invalid(err)
+		return EssayDetail{}, Invalid(err)
 	}
 	tags, err := cleanTags(in.Tags)
 	if err != nil {
@@ -190,11 +190,11 @@ func (s *Service) UpdateEssay(actor, id string, in UpdateEssayInput) (EssayDetai
 		return EssayDetail{}, err
 	}
 	old := e.Content
-	spec, _ := typeSpec(e.Type)
+	spec, _ := LookupType(e.Type)
 	if in.Type != nil && *in.Type != e.Type {
-		ns, ok := typeSpec(*in.Type)
+		ns, ok := LookupType(*in.Type)
 		if !ok || ns.Subject != e.Subject {
-			return EssayDetail{}, validationf("题型只能在本科目（%s）内切换，%q 不可用", e.Subject, *in.Type)
+			return EssayDetail{}, Validationf("题型只能在本科目（%s）内切换，%q 不可用", e.Subject, *in.Type)
 		}
 		spec, e.Type = ns, ns.ID
 	}
@@ -203,7 +203,7 @@ func (s *Service) UpdateEssay(actor, id string, in UpdateEssayInput) (EssayDetai
 	}
 	if in.Type != nil || in.Category != nil {
 		if err := categoryError(spec, e.Category); err != nil {
-			return EssayDetail{}, invalid(err)
+			return EssayDetail{}, Invalid(err)
 		}
 	}
 	if in.Tags != nil {
@@ -326,7 +326,7 @@ func (s *Service) RestoreVersion(actor, essayID, versionID string) (EssayDetail,
 	old := e.Content
 	e.Title, e.Type, e.Prompt, e.Content = v.Title, v.Type, v.Prompt, v.Content
 	e.WordCount = countWords(e.Content, e.Subject)
-	if spec, ok := typeSpec(e.Type); ok && categoryError(spec, e.Category) != nil {
+	if spec, ok := LookupType(e.Type); ok && categoryError(spec, e.Category) != nil {
 		e.Category = "" // 题型变了而原分类不再适用：清空，由用户重选
 	}
 	e.UpdatedAt = at
@@ -376,7 +376,7 @@ func buildAnnotation(q querier, e Essay, t []uint16, actor string, it AnnotateIt
 			p, err = getAnnotation(q, *p.ParentID)
 		}
 		if errors.Is(err, ErrNotFound) || (err == nil && p.EssayID != e.ID) {
-			return a, validationf("父标注 %s 不存在或不属于这篇作文", *it.ParentID)
+			return a, Validationf("父标注 %s 不存在或不属于这篇作文", *it.ParentID)
 		}
 		if err != nil {
 			return a, err
@@ -388,13 +388,13 @@ func buildAnnotation(q querier, e Essay, t []uint16, actor string, it AnnotateIt
 		followParent(&a, p)
 	}
 	if !slices.Contains(AnnotationKinds, a.Kind) {
-		return a, validationf("kind 须为 %s 之一", strings.Join(AnnotationKinds, " / "))
+		return a, Validationf("kind 须为 %s 之一", strings.Join(AnnotationKinds, " / "))
 	}
 	if a.ParentID != nil {
 		return a, nil
 	}
 	if a.Kind == "correction" && a.Suggestion == nil {
-		return a, validationf("纠错标注（correction）必须给出 suggestion")
+		return a, Validationf("纠错标注（correction）必须给出 suggestion")
 	}
 	switch {
 	case it.Start != nil && it.End != nil:
@@ -402,11 +402,11 @@ func buildAnnotation(q querier, e Essay, t []uint16, actor string, it AnnotateIt
 			return a, err
 		}
 		if got := s16(t[*it.Start:*it.End]); it.Quote != "" && got != it.Quote {
-			return a, validationf("区间 [%d,%d) 的文本是「%s」，与 quote「%s」不符", *it.Start, *it.End, got, it.Quote)
+			return a, Validationf("区间 [%d,%d) 的文本是「%s」，与 quote「%s」不符", *it.Start, *it.End, got, it.Quote)
 		}
 		setAnchor(&a, t, *it.Start, *it.End)
 	case it.Start != nil || it.End != nil:
-		return a, validationf("start 与 end 须同时给出")
+		return a, Validationf("start 与 end 须同时给出")
 	default:
 		start, end, err := locateQuote(t, it.Quote, it.Occurrence)
 		if err != nil {
@@ -417,7 +417,7 @@ func buildAnnotation(q querier, e Essay, t []uint16, actor string, it AnnotateIt
 	return a, nil
 }
 
-func isInputError(err error) bool {
+func IsInputError(err error) bool {
 	var ve *ValidationError
 	return errors.As(err, &ve) || errors.Is(err, ErrNotFound)
 }
@@ -436,7 +436,7 @@ func (s *Service) Annotate(actor, essayID string, items []AnnotateItem) ([]Annot
 		for i, it := range items {
 			results[i].Index = i
 			a, err := buildAnnotation(tx, e, t, actor, it, nil, at)
-			if isInputError(err) {
+			if IsInputError(err) {
 				results[i].Error = err.Error()
 				continue
 			}
@@ -497,7 +497,7 @@ func (s *Service) UpdateAnnotation(actor, id string, p AnnotationPatch) (Annotat
 	reply := a.ParentID != nil
 	if p.Kind != nil {
 		if !slices.Contains(AnnotationKinds, *p.Kind) {
-			return a, validationf("kind 须为 %s 之一", strings.Join(AnnotationKinds, " / "))
+			return a, Validationf("kind 须为 %s 之一", strings.Join(AnnotationKinds, " / "))
 		}
 		a.Kind = *p.Kind
 	}
@@ -511,11 +511,11 @@ func (s *Service) UpdateAnnotation(actor, id string, p AnnotationPatch) (Annotat
 		a.Suggestion = p.Suggestion
 	}
 	if !reply && a.Kind == "correction" && a.Suggestion == nil {
-		return a, validationf("纠错标注（correction）必须给出 suggestion")
+		return a, Validationf("纠错标注（correction）必须给出 suggestion")
 	}
 	if p.Status != nil {
 		if reply {
-			return a, validationf("回复的状态跟随父标注")
+			return a, Validationf("回复的状态跟随父标注")
 		}
 		switch *p.Status {
 		case StatusResolved:
@@ -526,15 +526,15 @@ func (s *Service) UpdateAnnotation(actor, id string, p AnnotationPatch) (Annotat
 				relocate(&a, t, nil)
 			}
 		default:
-			return a, validationf("status 只能设为 open 或 resolved")
+			return a, Validationf("status 只能设为 open 或 resolved")
 		}
 	}
 	if p.Start != nil || p.End != nil {
 		if reply {
-			return a, validationf("回复跟随父标注的区间，不能单独定位")
+			return a, Validationf("回复跟随父标注的区间，不能单独定位")
 		}
 		if p.Start == nil || p.End == nil {
-			return a, validationf("start 与 end 须同时给出")
+			return a, Validationf("start 与 end 须同时给出")
 		}
 		if err := checkRange(t, *p.Start, *p.End); err != nil {
 			return a, err
@@ -612,13 +612,13 @@ func (s *Service) ApplySuggestions(actor, essayID string, ids []string) (EssayDe
 	applicable := func(a Annotation) error {
 		switch {
 		case a.ParentID != nil:
-			return validationf("标注 %s 是回复，不能采纳", a.ID)
+			return Validationf("标注 %s 是回复，不能采纳", a.ID)
 		case a.Suggestion == nil:
-			return validationf("标注 %s 没有替换建议", a.ID)
+			return Validationf("标注 %s 没有替换建议", a.ID)
 		case a.Status != StatusOpen:
-			return validationf("标注 %s 状态为 %s，不能采纳", a.ID, a.Status)
+			return Validationf("标注 %s 状态为 %s，不能采纳", a.ID, a.Status)
 		case a.End > len(t) || a.Start >= a.End || s16(t[a.Start:a.End]) != a.Quote:
-			return validationf("标注 %s 的位置与正文不符，请先重新定位", a.ID)
+			return Validationf("标注 %s 的位置与正文不符，请先重新定位", a.ID)
 		}
 		return nil
 	}
@@ -637,7 +637,7 @@ func (s *Service) ApplySuggestions(actor, essayID string, ids []string) (EssayDe
 		for _, id := range ids {
 			i, ok := index[id]
 			if !ok {
-				return EssayDetail{}, validationf("标注 %s 不属于这篇作文", id)
+				return EssayDetail{}, Validationf("标注 %s 不属于这篇作文", id)
 			}
 			if err := applicable(anns[i]); err != nil {
 				return EssayDetail{}, err
@@ -661,7 +661,7 @@ func (s *Service) ApplySuggestions(actor, essayID string, ids []string) (EssayDe
 		lastEnd = a.End
 	}
 	if len(reps) == 0 {
-		return EssayDetail{}, validationf("没有可采纳的建议")
+		return EssayDetail{}, Validationf("没有可采纳的建议")
 	}
 
 	content, edits, ranges := applyReplacements(t, reps)
@@ -704,36 +704,36 @@ func (s *Service) SubmitEvaluation(actor, essayID string, in EvaluationInput) (E
 		return EvaluationResult{}, err
 	}
 	if strings.TrimSpace(e.Content) == "" {
-		return EvaluationResult{}, validationf("正文为空，无法评分")
+		return EvaluationResult{}, Validationf("正文为空，无法评分")
 	}
-	spec, _ := typeSpec(e.Type)
+	spec, _ := LookupType(e.Type)
 	if len(in.Dimensions) != len(DimensionKeys) {
-		return EvaluationResult{}, validationf("dimensions 须恰好包含 %s 四项", strings.Join(DimensionKeys, " / "))
+		return EvaluationResult{}, Validationf("dimensions 须恰好包含 %s 四项", strings.Join(DimensionKeys, " / "))
 	}
 	dims := map[string]DimensionScore{}
 	sum := 0.0
 	for _, key := range DimensionKeys {
 		d, ok := in.Dimensions[key]
 		if !ok {
-			return EvaluationResult{}, validationf("dimensions 缺少 %s（须恰好包含 %s）", key, strings.Join(DimensionKeys, " / "))
+			return EvaluationResult{}, Validationf("dimensions 缺少 %s（须恰好包含 %s）", key, strings.Join(DimensionKeys, " / "))
 		}
-		dmax := dimensionMax(e.Subject, spec.MaxScore, key)
+		dmax := DimensionMax(e.Subject, spec.MaxScore, key)
 		if d.Score < 0 || d.Score > dmax+1e-9 {
-			return EvaluationResult{}, validationf("维度 %s 得分 %g 超出范围 0–%g", key, d.Score, dmax)
+			return EvaluationResult{}, Validationf("维度 %s 得分 %g 超出范围 0–%g", key, d.Score, dmax)
 		}
 		dims[key] = DimensionScore{Score: d.Score, MaxScore: dmax, Feedback: d.Feedback}
 		sum += d.Score
 	}
 	if in.Score < 0 || in.Score > spec.MaxScore {
-		return EvaluationResult{}, validationf("总分 %g 超出范围 0–%g", in.Score, spec.MaxScore)
+		return EvaluationResult{}, Validationf("总分 %g 超出范围 0–%g", in.Score, spec.MaxScore)
 	}
 	if math.Abs(sum-in.Score) > 0.05+1e-9 {
-		return EvaluationResult{}, validationf("四个维度之和 %.2f 与总分 %g 不符", sum, in.Score)
+		return EvaluationResult{}, Validationf("四个维度之和 %.2f 与总分 %g 不符", sum, in.Score)
 	}
 	kinds := CorrectionKinds[e.Subject]
 	for i, c := range in.Corrections {
 		if !slices.Contains(kinds, c.Kind) {
-			return EvaluationResult{}, validationf("第 %d 条纠错的 kind %q 无效，可选：%s", i+1, c.Kind, strings.Join(kinds, " / "))
+			return EvaluationResult{}, Validationf("第 %d 条纠错的 kind %q 无效，可选：%s", i+1, c.Kind, strings.Join(kinds, " / "))
 		}
 	}
 
@@ -764,7 +764,7 @@ func (s *Service) SubmitEvaluation(actor, essayID string, in EvaluationInput) (E
 				Label: CorrectionLabels[c.Kind], Note: c.Explanation, Suggestion: &corrected,
 			}
 			a, err := buildAnnotation(tx, e, t, actor, item, &evalID, at)
-			if isInputError(err) {
+			if IsInputError(err) {
 				results[i].Error = err.Error()
 				continue
 			}
@@ -840,3 +840,13 @@ func (s *Service) Log(actor, tool, essayID, summary string) {
 func (s *Service) Activity(limit int) []Activity { return s.hub.recent(limit) }
 
 func (s *Service) Subscribe() (<-chan Event, func()) { return s.hub.subscribe() }
+
+// Subscribers 返回当前 SSE 订阅者数量。
+func (s *Service) Subscribers() int {
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	return len(s.hub.subs)
+}
+
+// GetAnnotation 按 id 取标注。
+func (s *Service) GetAnnotation(id string) (Annotation, error) { return getAnnotation(s.db, id) }

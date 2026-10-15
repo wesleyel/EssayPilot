@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"bufio"
@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/wesleyel/essay-eval/internal/core"
 )
 
 type apiClient struct {
@@ -18,7 +20,7 @@ type apiClient struct {
 	srv *httptest.Server
 }
 
-func newAPIClient(t *testing.T) (*apiClient, *Service) {
+func newAPIClient(t *testing.T) (*apiClient, *core.Service) {
 	s := newTestService(t)
 	srv := httptest.NewServer(newAPI(s, APIOptions{MCPEnabled: true, MCPPath: "/mcp", WebMCP: true}))
 	t.Cleanup(srv.Close)
@@ -64,29 +66,29 @@ func TestAPIEndToEnd(t *testing.T) {
 
 	var meta map[string]any
 	c.do("GET", "/api/meta", "", nil, 200, &meta)
-	if meta["webmcp"] != true || meta["mcp"].(map[string]any)["path"] != "/mcp" || len(meta["types"].([]any)) != len(Types) {
+	if meta["webmcp"] != true || meta["mcp"].(map[string]any)["path"] != "/mcp" || len(meta["types"].([]any)) != len(core.Types) {
 		t.Fatalf("meta: %v", meta)
 	}
 
-	var d EssayDetail
-	c.do("POST", "/api/essays", "", CreateEssayInput{Subject: English, Type: "part-a", Category: "建议信", Tags: []string{"信"}, Content: "Dear Tom, I has a idea."}, 201, &d)
+	var d core.EssayDetail
+	c.do("POST", "/api/essays", "", core.CreateEssayInput{Subject: core.English, Type: "part-a", Category: "建议信", Tags: []string{"信"}, Content: "Dear Tom, I has a idea."}, 201, &d)
 	id := d.Essay.ID
-	c.do("POST", "/api/essays", "", CreateEssayInput{Subject: English, Type: "part-a", Tags: []string{"信"}}, 400, nil)
+	c.do("POST", "/api/essays", "", core.CreateEssayInput{Subject: core.English, Type: "part-a", Tags: []string{"信"}}, 400, nil)
 	c.do("POST", "/api/essays", "", "not json", 400, nil)
 
-	var list []EssaySummary
+	var list []core.EssaySummary
 	c.do("GET", "/api/essays?subject=english&tag=%E4%BF%A1", "", nil, 200, &list)
 	if len(list) != 1 || list[0].ID != id {
 		t.Fatalf("list: %+v", list)
 	}
 	c.do("GET", "/api/essays/nope", "", nil, 404, nil)
-	c.do("PATCH", "/api/essays/"+id, "", UpdateEssayInput{Title: ptrTo("给 Tom 的信")}, 200, &d)
+	c.do("PATCH", "/api/essays/"+id, "", core.UpdateEssayInput{Title: ptrTo("给 Tom 的信")}, 200, &d)
 	if d.Essay.Title != "给 Tom 的信" {
 		t.Fatalf("patch: %+v", d.Essay)
 	}
 
-	var results []AnnotateResult
-	c.do("POST", "/api/essays/"+id+"/annotations", "agent:webmcp", map[string]any{"items": []AnnotateItem{
+	var results []core.AnnotateResult
+	c.do("POST", "/api/essays/"+id+"/annotations", "agent:webmcp", map[string]any{"items": []core.AnnotateItem{
 		{Quote: "has", Kind: "correction", Suggestion: ptrTo("have")},
 		{Quote: "a idea", Kind: "correction", Suggestion: ptrTo("an idea")},
 		{Quote: "zzz", Kind: "issue"},
@@ -97,19 +99,19 @@ func TestAPIEndToEnd(t *testing.T) {
 	if acts := s.Activity(10); len(acts) == 0 || acts[0].Actor != "agent:webmcp" || acts[0].EssayID != id {
 		t.Fatalf("activity: %+v", acts)
 	}
-	var acts []Activity
+	var acts []core.Activity
 	c.do("GET", "/api/activity?limit=1", "", nil, 200, &acts)
 	if len(acts) != 1 {
 		t.Fatalf("activity api: %+v", acts)
 	}
 
 	aid := results[0].Annotation.ID
-	var ann Annotation
-	c.do("PATCH", "/api/annotations/"+aid, "", AnnotationPatch{Note: ptrTo("主谓一致")}, 200, &ann)
+	var ann core.Annotation
+	c.do("PATCH", "/api/annotations/"+aid, "", core.AnnotationPatch{Note: ptrTo("主谓一致")}, 200, &ann)
 	if ann.Note != "主谓一致" {
 		t.Fatalf("patch annotation: %+v", ann)
 	}
-	c.do("PATCH", "/api/annotations/"+aid, "", AnnotationPatch{Kind: ptrTo("bogus")}, 400, nil)
+	c.do("PATCH", "/api/annotations/"+aid, "", core.AnnotationPatch{Kind: ptrTo("bogus")}, 400, nil)
 	c.do("POST", "/api/annotations/"+aid+"/apply", "", nil, 200, &d)
 	if d.Essay.Content != "Dear Tom, I have a idea." {
 		t.Fatalf("apply one: %q", d.Essay.Content)
@@ -121,20 +123,20 @@ func TestAPIEndToEnd(t *testing.T) {
 	c.do("POST", "/api/essays/"+id+"/apply", "", map[string]any{"ids": []string{}}, 400, nil)
 
 	// 评分：Part A 满分 10，每维 2.5
-	bad := EvaluationInput{Score: 9, Dimensions: map[string]DimensionInput{"content": {Score: 2}, "language": {Score: 2}, "structure": {Score: 2}, "convention": {Score: 2}}}
+	bad := core.EvaluationInput{Score: 9, Dimensions: map[string]core.DimensionInput{"content": {Score: 2}, "language": {Score: 2}, "structure": {Score: 2}, "convention": {Score: 2}}}
 	c.do("POST", "/api/essays/"+id+"/evaluations", "agent:x", bad, 400, nil)
 	good := bad
 	good.Score = 8
-	var er EvaluationResult
+	var er core.EvaluationResult
 	c.do("POST", "/api/essays/"+id+"/evaluations", "agent:x", good, 201, &er)
 	if er.Evaluation.Score != 8 || er.Version.Note != "评分快照" {
 		t.Fatalf("evaluation: %+v", er)
 	}
 
-	var v Version
+	var v core.Version
 	c.do("POST", "/api/essays/"+id+"/versions", "", map[string]string{"note": "初稿"}, 201, &v)
 	c.do("POST", "/api/essays/"+id+"/versions", "", nil, 201, nil)
-	c.do("PATCH", "/api/essays/"+id, "", UpdateEssayInput{Content: ptrTo("changed")}, 200, nil)
+	c.do("PATCH", "/api/essays/"+id, "", core.UpdateEssayInput{Content: ptrTo("changed")}, 200, nil)
 	c.do("POST", "/api/essays/"+id+"/versions/"+v.ID+"/restore", "", nil, 200, &d)
 	if d.Essay.Content != "Dear Tom, I have an idea." {
 		t.Fatalf("restore: %q", d.Essay.Content)
@@ -146,8 +148,8 @@ func TestAPIEndToEnd(t *testing.T) {
 	c.do("DELETE", "/api/annotations/"+aid, "", nil, 404, nil)
 
 	var rb struct {
-		Spec TypeSpec `json:"spec"`
-		Text string   `json:"text"`
+		Spec core.TypeSpec `json:"spec"`
+		Text string        `json:"text"`
 	}
 	c.do("GET", "/api/rubric/part-a", "", nil, 200, &rb)
 	if rb.Spec.ID != "part-a" || rb.Text == "" {
@@ -162,15 +164,15 @@ func TestAPIEndToEnd(t *testing.T) {
 	c.do("GET", "/api/prompts/grade_essay", "", nil, 400, nil)
 	c.do("GET", "/api/prompts/grade_essay?essay=nope", "", nil, 404, nil)
 
-	var ui UIContext
-	c.do("PUT", "/api/ui-context", "", UIContext{EssayID: id, SelectionStart: 1, SelectionEnd: 2}, 200, &ui)
+	var ui core.UIContext
+	c.do("PUT", "/api/ui-context", "", core.UIContext{EssayID: id, SelectionStart: 1, SelectionEnd: 2}, 200, &ui)
 	c.do("GET", "/api/ui-context", "", nil, 200, &ui)
 	if ui.EssayID != id || ui.UpdatedAt == "" {
 		t.Fatalf("ui-context: %+v", ui)
 	}
 
-	c.do("POST", "/api/essays", "robot", CreateEssayInput{}, 400, nil)
-	c.do("POST", "/api/essays", "agent:", CreateEssayInput{}, 400, nil)
+	c.do("POST", "/api/essays", "robot", core.CreateEssayInput{}, 400, nil)
+	c.do("POST", "/api/essays", "agent:", core.CreateEssayInput{}, 400, nil)
 	c.do("GET", "/api/nope", "", nil, 404, nil)
 	c.do("DELETE", "/api/essays/"+id, "", nil, 204, nil)
 	c.do("DELETE", "/api/essays/"+id, "", nil, 404, nil)
@@ -214,9 +216,9 @@ func TestAPIEvents(t *testing.T) {
 	}
 	waitFor(": connected")
 
-	c.do("POST", "/api/essays/"+d.Essay.ID+"/annotations", "agent:bot", map[string]any{"items": []AnnotateItem{{Quote: "world", Kind: "good"}}}, 200, nil)
+	c.do("POST", "/api/essays/"+d.Essay.ID+"/annotations", "agent:bot", map[string]any{"items": []core.AnnotateItem{{Quote: "world", Kind: "good"}}}, 200, nil)
 	waitFor("event: annotations")
-	var ev Event
+	var ev core.Event
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(waitFor("data: "), "data: ")), &ev); err != nil {
 		t.Fatal(err)
 	}
@@ -229,9 +231,7 @@ func TestAPIEvents(t *testing.T) {
 	res.Body.Close()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		s.hub.mu.Lock()
-		n := len(s.hub.subs)
-		s.hub.mu.Unlock()
+		n := s.Subscribers()
 		if n == 0 {
 			break
 		}

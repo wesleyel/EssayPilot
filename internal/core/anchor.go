@@ -1,4 +1,4 @@
-package main
+package core
 
 // 标注锚定：偏移一律为 UTF-16 码元（与浏览器 textarea.selectionStart 一致），左闭右开。
 // 每条标注记下 quote 与前后各最多 32 个码元的上下文；正文改动后据此重新定位。
@@ -17,10 +17,10 @@ func isLowSurrogate(c uint16) bool { return c >= 0xDC00 && c <= 0xDFFF }
 // checkRange 校验 [start,end) 非空、在正文内且不切开代理对。
 func checkRange(t []uint16, start, end int) error {
 	if start < 0 || end > len(t) || start >= end {
-		return validationf("区间 [%d,%d) 无效（正文长度 %d）", start, end, len(t))
+		return Validationf("区间 [%d,%d) 无效（正文长度 %d）", start, end, len(t))
 	}
 	if isLowSurrogate(t[start]) || (end < len(t) && isLowSurrogate(t[end])) {
-		return validationf("区间 [%d,%d) 切开了一个字符", start, end)
+		return Validationf("区间 [%d,%d) 切开了一个字符", start, end)
 	}
 	return nil
 }
@@ -58,7 +58,7 @@ func findAll(t, q []uint16) []int {
 // locateQuote 找 quote 的第 occurrence 处（从 1 开始，0 视为 1）。
 func locateQuote(t []uint16, quote string, occurrence int) (int, int, error) {
 	if quote == "" {
-		return 0, 0, validationf("quote 不能为空")
+		return 0, 0, Validationf("quote 不能为空")
 	}
 	q := u16(quote)
 	occ := findAll(t, q)
@@ -66,10 +66,10 @@ func locateQuote(t []uint16, quote string, occurrence int) (int, int, error) {
 		occurrence = 1
 	}
 	if len(occ) == 0 {
-		return 0, 0, validationf("正文中找不到「%s」", quote)
+		return 0, 0, Validationf("正文中找不到「%s」", quote)
 	}
 	if occurrence > len(occ) {
-		return 0, 0, validationf("「%s」在正文中只出现 %d 次", quote, len(occ))
+		return 0, 0, Validationf("「%s」在正文中只出现 %d 次", quote, len(occ))
 	}
 	p := occ[occurrence-1]
 	return p, p + len(q), nil

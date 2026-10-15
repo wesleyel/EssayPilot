@@ -1,4 +1,4 @@
-package main
+package server
 
 // MCP 服务：本地 Agent 通过这些工具读写作文、标注与评分。
 // 服务端不调用模型；评分、润色都由 Agent 完成后写回。
@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/wesleyel/essay-eval/internal/core"
 )
 
 const mcpInstructions = `EssayPilot 是考研作文（英语 Part A/B、政治主观题）批阅工作台。服务端不调用任何模型：评分、纠错、润色都由你（Agent）完成，再通过这些工具写回，用户会在网页界面上实时看到你的改动。
@@ -60,7 +61,7 @@ func clientActor(info *mcp.Implementation) string {
 }
 
 // addTool 包一层：取 actor、调用处理函数、统一写 Activity 日志。
-func addTool[In, Out any](srv *mcp.Server, s *Service, t *mcp.Tool, fn func(c *mcpCall, in In) (Out, error)) {
+func addTool[In, Out any](srv *mcp.Server, s *core.Service, t *mcp.Tool, fn func(c *mcpCall, in In) (Out, error)) {
 	mcp.AddTool(srv, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		c := &mcpCall{actor: clientActor(req.ClientInfo())}
 		out, err := fn(c, in)
@@ -78,7 +79,7 @@ func addTool[In, Out any](srv *mcp.Server, s *Service, t *mcp.Tool, fn func(c *m
 }
 
 func toolError(err error) error {
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, core.ErrNotFound) {
 		return fmt.Errorf("未找到：%v", err)
 	}
 	return err
@@ -102,7 +103,7 @@ type listEssaysIn struct {
 }
 
 type listEssaysOut struct {
-	Essays []EssaySummary `json:"essays"`
+	Essays []core.EssaySummary `json:"essays"`
 }
 
 type idIn struct {
@@ -115,14 +116,14 @@ type essayIDIn struct {
 
 // essayView 是 EssayDetail 加上按段编号的正文。
 type essayView struct {
-	Essay       Essay        `json:"essay"`
-	Annotations []Annotation `json:"annotations" jsonschema:"标注，按位置升序；author 为 user 的是用户自己的标记"`
-	Evaluations []Evaluation `json:"evaluations" jsonschema:"评分记录，新的在前"`
-	Versions    []Version    `json:"versions" jsonschema:"版本快照，新的在前"`
-	Numbered    string       `json:"numbered" jsonschema:"正文按段编号的文本（¶1 ¶2 …），方便引用；quote 仍须摘自原文、不含编号"`
+	Essay       core.Essay        `json:"essay"`
+	Annotations []core.Annotation `json:"annotations" jsonschema:"标注，按位置升序；author 为 user 的是用户自己的标记"`
+	Evaluations []core.Evaluation `json:"evaluations" jsonschema:"评分记录，新的在前"`
+	Versions    []core.Version    `json:"versions" jsonschema:"版本快照，新的在前"`
+	Numbered    string            `json:"numbered" jsonschema:"正文按段编号的文本（¶1 ¶2 …），方便引用；quote 仍须摘自原文、不含编号"`
 }
 
-func viewOf(d EssayDetail) essayView {
+func viewOf(d core.EssayDetail) essayView {
 	return essayView{d.Essay, d.Annotations, d.Evaluations, d.Versions, numberedText(d.Essay.Content)}
 }
 
@@ -169,7 +170,7 @@ type saveVersionIn struct {
 }
 
 type listVersionsOut struct {
-	Versions []Version `json:"versions"`
+	Versions []core.Version `json:"versions"`
 }
 
 type restoreVersionIn struct {
@@ -192,9 +193,9 @@ type annotateIn struct {
 }
 
 type annotateOut struct {
-	Results []AnnotateResult `json:"results" jsonschema:"与 items 一一对应；error 非空的条目未保存（多为未找到原文），修正 quote 后重试"`
-	Added   int              `json:"added"`
-	Failed  int              `json:"failed"`
+	Results []core.AnnotateResult `json:"results" jsonschema:"与 items 一一对应；error 非空的条目未保存（多为未找到原文），修正 quote 后重试"`
+	Added   int                   `json:"added"`
+	Failed  int                   `json:"failed"`
 }
 
 type replyIn struct {
@@ -210,7 +211,7 @@ type listAnnotationsIn struct {
 }
 
 type listAnnotationsOut struct {
-	Annotations []Annotation `json:"annotations"`
+	Annotations []core.Annotation `json:"annotations"`
 }
 
 type updateAnnotationIn struct {
@@ -244,7 +245,7 @@ type dimensionOut struct {
 }
 
 type rubricOut struct {
-	Spec            TypeSpec       `json:"spec"`
+	Spec            core.TypeSpec  `json:"spec"`
 	Dimensions      []dimensionOut `json:"dimensions" jsonschema:"四个评分维度及各自满分"`
 	CorrectionKinds []string       `json:"correctionKinds" jsonschema:"corrections[].kind 可取的值"`
 	Text            string         `json:"text" jsonschema:"完整阅卷细则"`
@@ -288,31 +289,31 @@ type deleteEvaluationIn struct {
 }
 
 type uiContextOut struct {
-	UIContext
+	core.UIContext
 	Title string `json:"title,omitempty" jsonschema:"当前打开作文的标题"`
 	Hint  string `json:"hint" jsonschema:"说明"`
 }
 
 type listTypesOut struct {
-	Types                []TypeSpec                           `json:"types"`
-	Dimensions           map[Subject]map[string]DimensionSpec `json:"dimensions" jsonschema:"各科目四维的名称、权重（乘以题型满分即维度满分）与标准"`
-	DimensionKeys        []string                             `json:"dimensionKeys"`
-	CorrectionKinds      map[Subject][]string                 `json:"correctionKinds"`
-	CorrectionLabels     map[string]string                    `json:"correctionLabels"`
-	AnnotationKinds      []string                             `json:"annotationKinds"`
-	AnnotationKindLabels map[string]string                    `json:"annotationKindLabels"`
+	Types                []core.TypeSpec                                `json:"types"`
+	Dimensions           map[core.Subject]map[string]core.DimensionSpec `json:"dimensions" jsonschema:"各科目四维的名称、权重（乘以题型满分即维度满分）与标准"`
+	DimensionKeys        []string                                       `json:"dimensionKeys"`
+	CorrectionKinds      map[core.Subject][]string                      `json:"correctionKinds"`
+	CorrectionLabels     map[string]string                              `json:"correctionLabels"`
+	AnnotationKinds      []string                                       `json:"annotationKinds"`
+	AnnotationKindLabels map[string]string                              `json:"annotationKindLabels"`
 }
 
 // ---------- 服务 ----------
 
-func newMCPServer(s *Service) *mcp.Server {
+func newMCPServer(s *core.Service) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "essaypilot", Title: "EssayPilot", Version: "2.0.0"},
 		&mcp.ServerOptions{Instructions: mcpInstructions})
 
 	addTool(srv, s, &mcp.Tool{Name: "list_essays", Annotations: readOnly,
 		Description: "列出作文（不含正文），可按科目、题型、标签筛选或搜索。用户提到某篇但没给 id 时先用它查找。"},
 		func(c *mcpCall, in listEssaysIn) (listEssaysOut, error) {
-			list, err := s.ListEssays(EssayFilter{Subject: in.Subject, Type: in.Type, Tag: in.Tag, Query: in.Query})
+			list, err := s.ListEssays(core.EssayFilter{Subject: in.Subject, Type: in.Type, Tag: in.Tag, Query: in.Query})
 			if err != nil {
 				return listEssaysOut{}, err
 			}
@@ -334,7 +335,7 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "create_essay", Annotations: writeTool,
 		Description: "新建一篇作文（题目 + 作答）。英语题型须选分类，至少一个主题标签。"},
 		func(c *mcpCall, in createEssayIn) (essayView, error) {
-			d, err := s.CreateEssay(c.actor, CreateEssayInput{Subject: Subject(in.Subject), Type: in.Type, Title: in.Title,
+			d, err := s.CreateEssay(c.actor, core.CreateEssayInput{Subject: core.Subject(in.Subject), Type: in.Type, Title: in.Title,
 				Category: in.Category, Tags: in.Tags, Prompt: in.Prompt, Content: in.Content})
 			if err != nil {
 				return essayView{}, err
@@ -346,7 +347,7 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "update_essay", Annotations: writeTool,
 		Description: "修改作文的标题、题型、分类、标签、题目或正文，只传要改的字段。改正文前建议先 save_version；只想提修改建议时用 annotate 的 correction，不要直接改正文。"},
 		func(c *mcpCall, in updateEssayIn) (essayView, error) {
-			d, err := s.UpdateEssay(c.actor, in.ID, UpdateEssayInput{Type: in.Type, Title: in.Title, Category: in.Category,
+			d, err := s.UpdateEssay(c.actor, in.ID, core.UpdateEssayInput{Type: in.Type, Title: in.Title, Category: in.Category,
 				Tags: in.Tags, Prompt: in.Prompt, Content: in.Content})
 			if err != nil {
 				return essayView{}, err
@@ -360,7 +361,7 @@ func newMCPServer(s *Service) *mcp.Server {
 			}
 			c.note(in.ID, "修改 %d 个字段", len(fields))
 			if in.Content != nil {
-				c.summary = fmt.Sprintf("修改正文（%d %s）", d.Essay.WordCount, lengthUnit(d.Essay.Subject))
+				c.summary = fmt.Sprintf("修改正文（%d %s）", d.Essay.WordCount, core.LengthUnit(d.Essay.Subject))
 			}
 			return viewOf(d), nil
 		})
@@ -377,10 +378,10 @@ func newMCPServer(s *Service) *mcp.Server {
 
 	addTool(srv, s, &mcp.Tool{Name: "save_version", Annotations: writeTool,
 		Description: "把当前稿保存为版本快照（评分时会自动生成，无需手动）。大改正文前用它留底。"},
-		func(c *mcpCall, in saveVersionIn) (Version, error) {
+		func(c *mcpCall, in saveVersionIn) (core.Version, error) {
 			v, err := s.SaveVersion(c.actor, in.EssayID, in.Note)
 			if err != nil {
-				return Version{}, err
+				return core.Version{}, err
 			}
 			c.note(in.EssayID, "保存版本%s", quoteNote(in.Note))
 			return v, nil
@@ -411,9 +412,9 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "annotate", Annotations: writeTool,
 		Description: "在正文上批量添加标注（重点 / 亮点 / 问题 / 疑问 / 纠错），显示为界面右侧的边注。quote 必须逐字摘自当前正文；纠错要带 suggestion。返回每条结果，未找到原文的条目会带 error。"},
 		func(c *mcpCall, in annotateIn) (annotateOut, error) {
-			items := make([]AnnotateItem, len(in.Items))
+			items := make([]core.AnnotateItem, len(in.Items))
 			for i, it := range in.Items {
-				items[i] = AnnotateItem{Quote: it.Quote, Occurrence: it.Occurrence, Kind: it.Kind, Label: it.Label,
+				items[i] = core.AnnotateItem{Quote: it.Quote, Occurrence: it.Occurrence, Kind: it.Kind, Label: it.Label,
 					Note: it.Note, Suggestion: it.Suggestion}
 			}
 			res, err := s.Annotate(c.actor, in.EssayID, items)
@@ -438,24 +439,24 @@ func newMCPServer(s *Service) *mcp.Server {
 
 	addTool(srv, s, &mcp.Tool{Name: "reply", Annotations: writeTool,
 		Description: "回复一条标注（通常是回答用户 author=user 的疑问），回复显示在该边注下方，与原标注共享位置。"},
-		func(c *mcpCall, in replyIn) (Annotation, error) {
-			parentAnn, err := findAnnotation(s, in.AnnotationID)
+		func(c *mcpCall, in replyIn) (core.Annotation, error) {
+			parentAnn, err := s.GetAnnotation(in.AnnotationID)
 			if err != nil {
-				return Annotation{}, err
+				return core.Annotation{}, err
 			}
 			essayID := parentAnn.EssayID
 			parent := in.AnnotationID
-			res, err := s.Annotate(c.actor, essayID, []AnnotateItem{{Note: in.Note, ParentID: &parent}})
+			res, err := s.Annotate(c.actor, essayID, []core.AnnotateItem{{Note: in.Note, ParentID: &parent}})
 			c.essayID = essayID
 			if err != nil {
-				return Annotation{}, err
+				return core.Annotation{}, err
 			}
 			if len(res) == 0 || res[0].Annotation == nil {
 				msg := "回复失败"
 				if len(res) > 0 && res[0].Error != "" {
 					msg = res[0].Error
 				}
-				return Annotation{}, &ValidationError{Msg: msg}
+				return core.Annotation{}, &core.ValidationError{Msg: msg}
 			}
 			c.note(essayID, "回复标注：%s", clip(in.Note, 24))
 			return *res[0].Annotation, nil
@@ -464,7 +465,7 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "list_annotations", Annotations: readOnly,
 		Description: "列出作文上的标注，可按作者（user 为用户自己的标记）、类型、状态筛选。回应用户标记前先用 author=user 调用。"},
 		func(c *mcpCall, in listAnnotationsIn) (listAnnotationsOut, error) {
-			list, err := s.ListAnnotations(in.EssayID, AnnotationFilter{Author: in.Author, Kind: in.Kind, Status: in.Status})
+			list, err := s.ListAnnotations(in.EssayID, core.AnnotationFilter{Author: in.Author, Kind: in.Kind, Status: in.Status})
 			if err != nil {
 				return listAnnotationsOut{}, err
 			}
@@ -474,11 +475,11 @@ func newMCPServer(s *Service) *mcp.Server {
 
 	addTool(srv, s, &mcp.Tool{Name: "update_annotation", Annotations: writeTool,
 		Description: "修改一条标注的类型、细分类、边注、替换建议或状态（resolved 表示已处理）。不要改用户自己的标注内容。"},
-		func(c *mcpCall, in updateAnnotationIn) (Annotation, error) {
-			a, err := s.UpdateAnnotation(c.actor, in.ID, AnnotationPatch{Kind: in.Kind, Label: in.Label, Note: in.Note,
+		func(c *mcpCall, in updateAnnotationIn) (core.Annotation, error) {
+			a, err := s.UpdateAnnotation(c.actor, in.ID, core.AnnotationPatch{Kind: in.Kind, Label: in.Label, Note: in.Note,
 				Suggestion: in.Suggestion, Status: in.Status})
 			if err != nil {
-				return Annotation{}, err
+				return core.Annotation{}, err
 			}
 			c.note(a.EssayID, "修改标注「%s」", clip(a.Quote, 20))
 			return a, nil
@@ -487,7 +488,7 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "delete_annotation", Annotations: destructive,
 		Description: "删除一条标注（连同其回复）。不要删除用户自己的标注，除非用户要求。"},
 		func(c *mcpCall, in idIn) (okOut, error) {
-			if a, err := findAnnotation(s, in.ID); err == nil {
+			if a, err := s.GetAnnotation(in.ID); err == nil {
 				c.essayID = a.EssayID
 			}
 			if err := s.DeleteAnnotation(c.actor, in.ID); err != nil {
@@ -513,7 +514,7 @@ func newMCPServer(s *Service) *mcp.Server {
 		func(c *mcpCall, in applySuggestionsIn) (essayView, error) {
 			before := 0
 			if in.IDs == nil {
-				if list, err := s.ListAnnotations(in.EssayID, AnnotationFilter{Status: StatusOpen}); err == nil {
+				if list, err := s.ListAnnotations(in.EssayID, core.AnnotationFilter{Status: core.StatusOpen}); err == nil {
 					for _, a := range list {
 						if a.Suggestion != nil && a.ParentID == nil {
 							before++
@@ -542,9 +543,9 @@ func newMCPServer(s *Service) *mcp.Server {
 				}
 				typ = d.Essay.Type
 			}
-			spec, ok := typeSpec(typ)
+			spec, ok := core.LookupType(typ)
 			if !ok {
-				return rubricOut{}, &ValidationError{Msg: fmt.Sprintf("未知题型：%q（传 type 或 essay_id，题型见 list_types）", typ)}
+				return rubricOut{}, &core.ValidationError{Msg: fmt.Sprintf("未知题型：%q（传 type 或 essay_id，题型见 list_types）", typ)}
 			}
 			c.note(in.EssayID, "%s 细则", spec.Label)
 			return rubricOf(spec), nil
@@ -552,22 +553,24 @@ func newMCPServer(s *Service) *mcp.Server {
 
 	addTool(srv, s, &mcp.Tool{Name: "submit_evaluation", Annotations: writeTool,
 		Description: "提交评分结果：总分、档次、四维分与评语、总评、亮点短板、润色稿、纠错项。服务端校验后自动生成版本快照，纠错项转成可采纳的纠错边注。被拒时按错误信息修正后重交。"},
-		func(c *mcpCall, in submitEvaluationIn) (EvaluationResult, error) {
-			corr := make([]CorrectionInput, len(in.Corrections))
+		func(c *mcpCall, in submitEvaluationIn) (core.EvaluationResult, error) {
+			corr := make([]core.CorrectionInput, len(in.Corrections))
 			for i, x := range in.Corrections {
-				corr[i] = CorrectionInput{Quote: x.Quote, Occurrence: x.Occurrence, Corrected: x.Corrected, Kind: x.Kind, Explanation: x.Explanation}
+				corr[i] = core.CorrectionInput{Quote: x.Quote, Occurrence: x.Occurrence, Corrected: x.Corrected, Kind: x.Kind, Explanation: x.Explanation}
 			}
-			dim := func(d dimensionScoreIn) DimensionInput { return DimensionInput{Score: d.Score, Feedback: d.Feedback} }
+			dim := func(d dimensionScoreIn) core.DimensionInput {
+				return core.DimensionInput{Score: d.Score, Feedback: d.Feedback}
+			}
 			c.essayID = in.EssayID
-			r, err := s.SubmitEvaluation(c.actor, in.EssayID, EvaluationInput{
+			r, err := s.SubmitEvaluation(c.actor, in.EssayID, core.EvaluationInput{
 				Score: in.Score, Band: in.Band,
-				Dimensions: map[string]DimensionInput{"content": dim(in.Dimensions.Content), "language": dim(in.Dimensions.Language),
+				Dimensions: map[string]core.DimensionInput{"content": dim(in.Dimensions.Content), "language": dim(in.Dimensions.Language),
 					"structure": dim(in.Dimensions.Structure), "convention": dim(in.Dimensions.Convention)},
 				OverallComment: in.OverallComment, Strengths: in.Strengths, Weaknesses: in.Weaknesses,
 				Polished: in.Polished, Corrections: corr,
 			})
 			if err != nil {
-				return EvaluationResult{}, err
+				return core.EvaluationResult{}, err
 			}
 			failed := 0
 			for _, x := range r.Corrections {
@@ -618,10 +621,10 @@ func newMCPServer(s *Service) *mcp.Server {
 	addTool(srv, s, &mcp.Tool{Name: "list_types", Annotations: readOnly,
 		Description: "列出全部题型（满分、字数、分类）、各科目评分维度、纠错类别与标注类型。新建作文或不确定取值时调用。"},
 		func(c *mcpCall, _ struct{}) (listTypesOut, error) {
-			c.note("", "%d 个题型", len(Types))
-			return listTypesOut{Types: Types, Dimensions: Dimensions, DimensionKeys: DimensionKeys,
-				CorrectionKinds: CorrectionKinds, CorrectionLabels: CorrectionLabels,
-				AnnotationKinds: AnnotationKinds, AnnotationKindLabels: AnnotationKindLabels}, nil
+			c.note("", "%d 个题型", len(core.Types))
+			return listTypesOut{Types: core.Types, Dimensions: core.Dimensions, DimensionKeys: core.DimensionKeys,
+				CorrectionKinds: core.CorrectionKinds, CorrectionLabels: core.CorrectionLabels,
+				AnnotationKinds: core.AnnotationKinds, AnnotationKindLabels: core.AnnotationKindLabels}, nil
 		})
 
 	// ---------- resources ----------
@@ -632,7 +635,7 @@ func newMCPServer(s *Service) *mcp.Server {
 			id := resourceID(req.Params.URI, "essay")
 			d, err := s.GetEssay(id)
 			if err != nil {
-				if errors.Is(err, ErrNotFound) {
+				if errors.Is(err, core.ErrNotFound) {
 					return nil, mcp.ResourceNotFoundError(req.Params.URI)
 				}
 				return nil, err
@@ -643,17 +646,17 @@ func newMCPServer(s *Service) *mcp.Server {
 	srv.AddResourceTemplate(&mcp.ResourceTemplate{Name: "rubric", Title: "阅卷细则", URITemplate: "rubric://{type}",
 		MIMEType: "text/markdown", Description: "某题型的完整阅卷细则，type 为题型 id（如 part-b、mayuan）"},
 		func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-			spec, ok := typeSpec(resourceID(req.Params.URI, "rubric"))
+			spec, ok := core.LookupType(resourceID(req.Params.URI, "rubric"))
 			if !ok {
 				return nil, mcp.ResourceNotFoundError(req.Params.URI)
 			}
-			return textResource(req.Params.URI, "# "+spec.Label+" 阅卷细则\n\n"+rubric(spec)), nil
+			return textResource(req.Params.URI, "# "+spec.Label+" 阅卷细则\n\n"+core.Rubric(spec)), nil
 		})
 
 	// ---------- prompts ----------
 
-	for _, name := range PromptNames {
-		srv.AddPrompt(&mcp.Prompt{Name: name, Description: promptDescriptions[name],
+	for _, name := range core.PromptNames {
+		srv.AddPrompt(&mcp.Prompt{Name: name, Description: core.PromptDescriptions[name],
 			Arguments: []*mcp.PromptArgument{{Name: "essay_id", Description: "作文 id", Required: true}}},
 			func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 				id := req.Params.Arguments["essay_id"]
@@ -661,11 +664,11 @@ func newMCPServer(s *Service) *mcp.Server {
 				if err != nil {
 					return nil, toolError(err)
 				}
-				text, err := promptText(name, d)
+				text, err := core.PromptText(name, d)
 				if err != nil {
 					return nil, err
 				}
-				return &mcp.GetPromptResult{Description: promptDescriptions[name],
+				return &mcp.GetPromptResult{Description: core.PromptDescriptions[name],
 					Messages: []*mcp.PromptMessage{{Role: "user", Content: &mcp.TextContent{Text: text}}}}, nil
 			})
 	}
@@ -673,7 +676,7 @@ func newMCPServer(s *Service) *mcp.Server {
 }
 
 // newMCPHandler 返回挂在 /mcp 的 Streamable HTTP handler（无状态）。
-func newMCPHandler(s *Service) http.Handler {
+func newMCPHandler(s *core.Service) http.Handler {
 	srv := newMCPServer(s)
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true})
@@ -681,18 +684,13 @@ func newMCPHandler(s *Service) http.Handler {
 
 // ---------- 辅助 ----------
 
-func rubricOf(spec TypeSpec) rubricOut {
-	out := rubricOut{Spec: spec, CorrectionKinds: CorrectionKinds[spec.Subject], Text: rubric(spec)}
-	for _, k := range DimensionKeys {
-		d := Dimensions[spec.Subject][k]
-		out.Dimensions = append(out.Dimensions, dimensionOut{k, d.Label, dimensionMax(spec.Subject, spec.MaxScore, k), d.Criteria})
+func rubricOf(spec core.TypeSpec) rubricOut {
+	out := rubricOut{Spec: spec, CorrectionKinds: core.CorrectionKinds[spec.Subject], Text: core.Rubric(spec)}
+	for _, k := range core.DimensionKeys {
+		d := core.Dimensions[spec.Subject][k]
+		out.Dimensions = append(out.Dimensions, dimensionOut{k, d.Label, core.DimensionMax(spec.Subject, spec.MaxScore, k), d.Criteria})
 	}
 	return out
-}
-
-// findAnnotation 按 id 取标注（用于 reply / delete_annotation 定位所属作文）。
-func findAnnotation(s *Service, id string) (Annotation, error) {
-	return getAnnotation(s.db, id)
 }
 
 func resourceID(uri, scheme string) string {
@@ -709,12 +707,12 @@ func textResource(uri, text string) *mcp.ReadResourceResult {
 	return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: "text/markdown", Text: text}}}
 }
 
-func essayMarkdown(d EssayDetail) string {
+func essayMarkdown(d core.EssayDetail) string {
 	e := d.Essay
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", e.Title)
 	label := e.Type
-	if spec, ok := typeSpec(e.Type); ok {
+	if spec, ok := core.LookupType(e.Type); ok {
 		label = fmt.Sprintf("%s（满分 %g）", spec.Label, spec.MaxScore)
 	}
 	fmt.Fprintf(&b, "- id：%s\n- 题型：%s\n", e.ID, label)
@@ -733,7 +731,7 @@ func essayMarkdown(d EssayDetail) string {
 		if a.ParentID != nil {
 			indent = "  - ↳ "
 		}
-		fmt.Fprintf(&b, "%s[%s", indent, AnnotationKindLabels[a.Kind])
+		fmt.Fprintf(&b, "%s[%s", indent, core.AnnotationKindLabels[a.Kind])
 		if a.Label != "" {
 			fmt.Fprintf(&b, "·%s", a.Label)
 		}
@@ -744,7 +742,7 @@ func essayMarkdown(d EssayDetail) string {
 		if a.Note != "" {
 			fmt.Fprintf(&b, "：%s", a.Note)
 		}
-		if a.Status != StatusOpen {
+		if a.Status != core.StatusOpen {
 			fmt.Fprintf(&b, "（%s）", a.Status)
 		}
 		b.WriteString("\n")
@@ -760,9 +758,9 @@ func essayMarkdown(d EssayDetail) string {
 	}
 	ev := d.Evaluations[0]
 	fmt.Fprintf(&b, "**%g / %g · %s**（%s，%s）\n\n", ev.Score, ev.MaxScore, ev.Band, ev.Author, ev.CreatedAt)
-	for _, k := range DimensionKeys {
+	for _, k := range core.DimensionKeys {
 		if ds, ok := ev.Dimensions[k]; ok {
-			fmt.Fprintf(&b, "- %s %g/%g：%s\n", Dimensions[e.Subject][k].Label, ds.Score, ds.MaxScore, ds.Feedback)
+			fmt.Fprintf(&b, "- %s %g/%g：%s\n", core.Dimensions[e.Subject][k].Label, ds.Score, ds.MaxScore, ds.Feedback)
 		}
 	}
 	fmt.Fprintf(&b, "\n**总评**：%s\n", ev.OverallComment)

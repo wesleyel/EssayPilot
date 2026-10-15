@@ -1,4 +1,4 @@
-package main
+package core
 
 // 内存事件中心：写操作广播 Event 给 SSE 订阅者；Agent 动态保留最近 200 条。
 

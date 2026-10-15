@@ -16,8 +16,8 @@
 ## 快速开始
 
 ```bash
-go build -o essaypilot .
-./essaypilot -mcp              # http://127.0.0.1:8790 ，MCP 在 /mcp
+go install ./cmd/essaypilot   # 装到 $(go env GOPATH)/bin；或 go build -o <目录> ./cmd/essaypilot
+essaypilot -mcp              # http://127.0.0.1:8790 ，MCP 在 /mcp
 ```
 
 接入 Claude Code：
@@ -50,16 +50,21 @@ MCP 工具、资源和提示词的完整说明见 [docs/api.md](docs/api.md)。�
 ## 结构
 
 ```
-main.go       启动参数、静态资源、令牌
-model.go      科目、题型、分类、评分维度、纠错类别
-rubric.go     阅卷细则（以 MCP 资源和提示词的形式提供给 Agent）
-store.go      SQLite
-anchor.go     标注锚定：正文修改后，标注跟着原文移动
-service.go    业务层（REST 与 MCP 共用）
-api.go        REST + SSE
-mcp.go        MCP 服务
-prompts.go    grade_essay / polish_essay / review_my_marks
-web/          前端（原生 JS，通过 go:embed 打包进二进制）
+cmd/essaypilot/   入口：启动参数、组装服务
+internal/core/    领域与业务层
+  model.go        科目、题型、分类、评分维度、纠错类别
+  types.go        实体与输入类型（REST、MCP、前端共用的 JSON 形状）
+  rubric.go       阅卷细则（以 MCP 资源和提示词的形式提供给 Agent）
+  prompts.go      grade_essay / polish_essay / review_my_marks
+  store.go        SQLite
+  anchor.go       标注锚定：正文修改后，标注跟着原文移动
+  service.go      业务层（REST 与 MCP 共用）
+  events.go       SSE 事件与 Agent 动态
+internal/server/  HTTP 层
+  server.go       路由组装、静态资源、令牌
+  api.go          REST + SSE
+  mcp.go          MCP 服务
+web/              前端（原生 JS，embed.go 用 go:embed 打包进二进制）
 ```
 
 ## 许可

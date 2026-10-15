@@ -1,4 +1,4 @@
-package main
+package server
 
 // REST API（/api/...）与 SSE 事件流。请求/响应均为 JSON，错误为 {"error": "..."}。
 
@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/wesleyel/essay-eval/internal/core"
 )
 
 type APIOptions struct {
@@ -24,11 +26,11 @@ type APIOptions struct {
 var ssePing = 25 * time.Second
 
 type api struct {
-	s    *Service
+	s    *core.Service
 	opts APIOptions
 }
 
-func newAPI(s *Service, opts APIOptions) http.Handler {
+func newAPI(s *core.Service, opts APIOptions) http.Handler {
 	a := &api{s, opts}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/meta", a.meta)
@@ -72,9 +74,9 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 func fail(w http.ResponseWriter, err error) {
-	var ve *ValidationError
+	var ve *core.ValidationError
 	switch {
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, core.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
 	case errors.As(err, &ve):
 		writeError(w, http.StatusBadRequest, ve.Msg)
@@ -107,7 +109,7 @@ func decode(r *http.Request, v any) error {
 	if err == nil || errors.Is(err, io.EOF) {
 		return nil
 	}
-	return validationf("请求体不是合法 JSON：%v", err)
+	return core.Validationf("请求体不是合法 JSON：%v", err)
 }
 
 // actor 读取 X-Actor 头：缺省 user，只接受 user 或 agent:<name>。
@@ -119,7 +121,7 @@ func actorOf(r *http.Request) (string, error) {
 	case a == "user", strings.HasPrefix(a, "agent:") && len(a) > len("agent:"):
 		return a, nil
 	}
-	return "", validationf("X-Actor 只能是 user 或 agent:<名称>")
+	return "", core.Validationf("X-Actor 只能是 user 或 agent:<名称>")
 }
 
 // write 包装写操作：解析 actor，Agent（WebMCP）发起的写操作记入 Agent 动态。
@@ -138,13 +140,13 @@ func (a *api) write(w http.ResponseWriter, r *http.Request, essayID string, fn f
 
 func (a *api) meta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"types":                Types,
-		"dimensions":           Dimensions,
-		"dimensionKeys":        DimensionKeys,
-		"correctionKinds":      CorrectionKinds,
-		"correctionLabels":     CorrectionLabels,
-		"annotationKinds":      AnnotationKinds,
-		"annotationKindLabels": AnnotationKindLabels,
+		"types":                core.Types,
+		"dimensions":           core.Dimensions,
+		"dimensionKeys":        core.DimensionKeys,
+		"correctionKinds":      core.CorrectionKinds,
+		"correctionLabels":     core.CorrectionLabels,
+		"annotationKinds":      core.AnnotationKinds,
+		"annotationKindLabels": core.AnnotationKindLabels,
 		"mcp":                  map[string]any{"enabled": a.opts.MCPEnabled, "path": a.opts.MCPPath},
 		"webmcp":               a.opts.WebMCP,
 	})
@@ -152,15 +154,15 @@ func (a *api) meta(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) listEssays(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := a.s.ListEssays(EssayFilter{Subject: q.Get("subject"), Type: q.Get("type"), Tag: q.Get("tag"), Query: q.Get("q")})
+	list, err := a.s.ListEssays(core.EssayFilter{Subject: q.Get("subject"), Type: q.Get("type"), Tag: q.Get("tag"), Query: q.Get("q")})
 	reply(w, http.StatusOK, list, err)
 }
 
 func (a *api) createEssay(w http.ResponseWriter, r *http.Request) {
-	var in CreateEssayInput
+	var in core.CreateEssayInput
 	a.write(w, r, "", func(actor string) error {
 		err := decode(r, &in)
-		var d EssayDetail
+		var d core.EssayDetail
 		if err == nil {
 			d, err = a.s.CreateEssay(actor, in)
 		}
@@ -177,9 +179,9 @@ func (a *api) getEssay(w http.ResponseWriter, r *http.Request) {
 func (a *api) updateEssay(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.write(w, r, id, func(actor string) error {
-		var in UpdateEssayInput
+		var in core.UpdateEssayInput
 		err := decode(r, &in)
-		var d EssayDetail
+		var d core.EssayDetail
 		if err == nil {
 			d, err = a.s.UpdateEssay(actor, id, in)
 		}
@@ -204,7 +206,7 @@ func (a *api) saveVersion(w http.ResponseWriter, r *http.Request) {
 			Note string `json:"note"`
 		}
 		err := decode(r, &in)
-		var v Version
+		var v core.Version
 		if err == nil {
 			v, err = a.s.SaveVersion(actor, id, in.Note)
 		}
@@ -235,10 +237,10 @@ func (a *api) annotate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.write(w, r, id, func(actor string) error {
 		var in struct {
-			Items []AnnotateItem `json:"items"`
+			Items []core.AnnotateItem `json:"items"`
 		}
 		err := decode(r, &in)
-		var res []AnnotateResult
+		var res []core.AnnotateResult
 		if err == nil {
 			res, err = a.s.Annotate(actor, id, in.Items)
 		}
@@ -254,7 +256,7 @@ func (a *api) applySuggestions(w http.ResponseWriter, r *http.Request) {
 			IDs []string `json:"ids"`
 		}
 		err := decode(r, &in)
-		var d EssayDetail
+		var d core.EssayDetail
 		if err == nil {
 			d, err = a.s.ApplySuggestions(actor, id, in.IDs)
 		}
@@ -266,9 +268,9 @@ func (a *api) applySuggestions(w http.ResponseWriter, r *http.Request) {
 func (a *api) submitEvaluation(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.write(w, r, id, func(actor string) error {
-		var in EvaluationInput
+		var in core.EvaluationInput
 		err := decode(r, &in)
-		var res EvaluationResult
+		var res core.EvaluationResult
 		if err == nil {
 			res, err = a.s.SubmitEvaluation(actor, id, in)
 		}
@@ -288,9 +290,9 @@ func (a *api) deleteEvaluation(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) updateAnnotation(w http.ResponseWriter, r *http.Request) {
 	a.write(w, r, "", func(actor string) error {
-		var p AnnotationPatch
+		var p core.AnnotationPatch
 		err := decode(r, &p)
-		var ann Annotation
+		var ann core.Annotation
 		if err == nil {
 			ann, err = a.s.UpdateAnnotation(actor, r.PathValue("aid"), p)
 		}
@@ -316,18 +318,18 @@ func (a *api) applySuggestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) rubric(w http.ResponseWriter, r *http.Request) {
-	spec, ok := typeSpec(r.PathValue("type"))
+	spec, ok := core.LookupType(r.PathValue("type"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "题型不存在")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"spec": spec, "text": rubric(spec)})
+	writeJSON(w, http.StatusOK, map[string]any{"spec": spec, "text": core.Rubric(spec)})
 }
 
 func (a *api) prompt(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("essay")
 	if id == "" {
-		fail(w, validationf("缺少 essay 参数"))
+		fail(w, core.Validationf("缺少 essay 参数"))
 		return
 	}
 	d, err := a.s.GetEssay(id)
@@ -335,10 +337,10 @@ func (a *api) prompt(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	text, err := promptText(r.PathValue("name"), d)
+	text, err := core.PromptText(r.PathValue("name"), d)
 	if err != nil {
-		if !isInputError(err) {
-			err = invalid(err)
+		if !core.IsInputError(err) {
+			err = core.Invalid(err)
 		}
 		fail(w, err)
 		return
@@ -351,7 +353,7 @@ func (a *api) getUIContext(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) putUIContext(w http.ResponseWriter, r *http.Request) {
-	var c UIContext
+	var c core.UIContext
 	if err := decode(r, &c); err != nil {
 		fail(w, err)
 		return
@@ -365,7 +367,7 @@ func (a *api) activity(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
-			fail(w, validationf("limit 须为正整数"))
+			fail(w, core.Validationf("limit 须为正整数"))
 			return
 		}
 		limit = n

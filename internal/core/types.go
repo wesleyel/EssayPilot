@@ -1,4 +1,4 @@
-package main
+package core
 
 // 实体与输入类型：REST、MCP、前端共用同一套 JSON 形状（camelCase）。
 // 契约说明见 docs/api.md。
