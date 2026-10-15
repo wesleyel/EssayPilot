@@ -6,7 +6,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 
 ## 约定
 
-- **作者（actor）**：界面上的操作记为 `user`；通过 MCP 的操作记为 `agent:<客户端名>`，例如 `agent:claude-code`；通过 WebMCP 的操作记为 `agent:webmcp`。标注会按作者分边显示：左页边是用户，右页边是 Agent。
+- **作者（actor）**：界面上的操作记为 `user`；通过 MCP 的操作记为 `agent:<客户端名>`，例如 `agent:claude-code`；通过 WebMCP 的操作记为 `agent:webmcp`。界面按类型分边显示标注：左页边是重点与亮点，右页边是问题、疑问与纠错；作者用颜色区分。
 - **偏移**：标注的 `start` 和 `end` 以 UTF-16 码元计，左闭右开，与浏览器 `textarea.selectionStart` 的计法一致。Agent 一般不需要自己算偏移，直接给 `quote`（逐字摘自正文的原文），由服务端定位即可。
 - **锚定**：正文修改后，标注会跟着原文移动。原文被删掉时，标注变为 `orphaned`，界面在正文底部列出，可以手动重新定位或删除。之后如果原文又出现，标注会自动恢复为 `open`。
 - **令牌**：用 `-token` 启动后，`/api` 和 `/mcp` 都需要带 `Authorization: Bearer <token>`；SSE 请求可以改用 `?token=` 传令牌。
