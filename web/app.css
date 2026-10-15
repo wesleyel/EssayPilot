@@ -383,9 +383,6 @@ mark.pending { background: color-mix(in srgb, var(--color-accent) 28%, transpare
 .nf { margin-top: 3px; display: flex; flex-direction: column; gap: 3px; }
 .s-R .nf, .s-B .nf { padding-left: 14px; }
 .s-L .nf { padding-right: 14px; }
-.corr { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
-.s-L .corr { flex-direction: row-reverse; }
-.corr b { font-weight: 600; }
 .ntx { color: var(--color-neutral-700); }
 .quote-ref { font-style: italic; color: var(--color-neutral-600); }
 .reply { font-style: italic; color: var(--color-neutral-700); }

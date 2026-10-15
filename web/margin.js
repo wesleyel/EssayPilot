@@ -13,7 +13,8 @@ const clip = (s, n = 60) => (s.length > n ? s.slice(0, n) + '…' : s);
 // wide：边注全文（Markdown 块）；否则单行摘要。
 function lineHTML(a, wide) {
   if (a.kind === 'correction' && a.suggestion != null) {
-    return `<s>${esc(a.quote)}</s> → ${esc(a.suggestion) || '<i>删去</i>'}`;
+    const sug = esc(a.suggestion) || '<i>删去</i>';
+    return `<s>${esc(a.quote)}</s> → ${wide ? `<b>${sug}</b>` : sug}`;
   }
   if (a.note) return wide ? md(a.note) : mdLine(a.note);
   if (a.label) return esc(a.label);
@@ -33,15 +34,16 @@ export function noteHTML(a, { num, replies = [], open, hot, side, full: fullMode
   const cls = `note s-${side} k-${a.kind} ${isAgent(a.author) ? 'ag' : 'us'}${open ? ' open' : ''}${wide ? ' wide' : ''}${hot ? ' hot' : ''}`;
   const numHTML = `<span class="num">${num ?? ''}</span>`;
   const blockNote = wide && !corr && a.note;
-  let line = blockNote ? `<div class="nt md">${lineHTML(a, true)}</div>` : `<span class="nt">${lineHTML(a, false)}</span>`;
-  if (!open && corr) line += `<button class="lnk" data-act="apply" data-id="${esc(a.id)}">采纳</button>`;
+  let line = blockNote ? `<div class="nt md">${lineHTML(a, true)}</div>` : `<span class="nt">${lineHTML(a, open)}</span>`;
+  if (corr) line += open
+    ? `<button class="btn btn-primary btn-xs" data-act="apply" data-id="${esc(a.id)}">采纳</button>`
+    : `<button class="lnk" data-act="apply" data-id="${esc(a.id)}">采纳</button>`;
   if (!open && replies.length) line += `<span class="rc" title="${replies.length} 条回复">↳${replies.length}</span>`;
   let full = '';
   if (!open && fullMode && corr && a.note) full = `<div class="nf"><div class="ntx md">${md(a.note)}</div></div>`;
   if (open) {
     const kindTag = `${KIND_LABEL[a.kind] || a.kind}${a.label && a.label !== a.note ? ' · ' + esc(a.label) : ''}`;
     full = `<div class="nf">
-      ${corr ? `<div class="corr"><span><s>${esc(a.quote)}</s> → <b>${esc(a.suggestion) || '<i>删去</i>'}</b></span><button class="btn btn-primary btn-xs" data-act="apply" data-id="${esc(a.id)}">采纳</button></div>` : ''}
       ${corr && a.note ? `<div class="ntx md">${md(a.note)}</div>` : ''}
       ${!corr && a.note ? `<div class="ntx quote-ref">“${esc(clip(a.quote, 80))}”</div>` : ''}
       ${replies.map(replyHTML).join('')}
