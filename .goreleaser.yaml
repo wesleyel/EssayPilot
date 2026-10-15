@@ -1,0 +1,76 @@
+# 发版：推 v* tag 后由 .github/workflows/release.yml 运行。
+# 编译各平台、发 GitHub Release，并把 Formula/essaypilot.rb 提交到 wesleyel/homebrew-tap。
+version: 2
+
+project_name: essaypilot
+
+builds:
+  - main: ./cmd/essaypilot
+    binary: essaypilot
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: SHA256SUMS
+
+changelog:
+  use: github-native
+
+brews:
+  - name: essaypilot
+    repository:
+      owner: wesleyel
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    commit_msg_template: "essaypilot {{ .Tag }}"
+    homepage: https://github.com/wesleyel/EssayPilot
+    description: Workbench for grading and annotating essays with your own AI agent over MCP
+    license: MIT
+    install: |
+      bin.install "essaypilot"
+    custom_block: |
+      post_install_steps do
+        mkdir_p "essaypilot", base: :var
+      end
+    service: |
+      run [opt_bin/"essaypilot", "-mcp", "-db", var/"essaypilot/essaypilot.db"]
+      keep_alive true
+      log_path var/"log/essaypilot.log"
+      error_log_path var/"log/essaypilot.log"
+    caveats: |
+      Start it in the background (data in #{var}/essaypilot):
+
+        brew services start essaypilot
+
+      Then open http://127.0.0.1:8790 and connect your agent, for example:
+
+        claude mcp add --transport http essaypilot http://127.0.0.1:8790/mcp
+    test: |
+      port = free_port
+      pid = spawn bin/"essaypilot", "-mcp", "-addr", "127.0.0.1:#{port}", "-db", testpath/"test.db"
+      begin
+        sleep 2
+        assert_match "part-a", shell_output("curl -fsS http://127.0.0.1:#{port}/api/meta")
+      ensure
+        Process.kill("TERM", pid)
+        Process.wait(pid)
+      end

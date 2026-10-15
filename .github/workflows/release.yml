@@ -1,12 +1,14 @@
 name: Release
 
+# 推 v* tag，或在 Actions 页手动运行并填版本号（会先打 tag）。
+# GoReleaser 编译各平台、发 Release，并把 Formula/essaypilot.rb 推到 wesleyel/homebrew-tap。
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 版本号，如 v2.0.0
+        description: 版本号，如 v2.2.0
         required: true
 
 permissions:
@@ -15,25 +17,26 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - run: go test ./...
-      - name: Build
-        run: |
-          mkdir -p dist
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            os=${target%/*}; arch=${target#*/}
-            name=essaypilot-${TAG}-${os}-${arch}
-            ext=""; [ "$os" = windows ] && ext=.exe
-            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "dist/$name$ext" ./cmd/essaypilot
-          done
-          cd dist && sha256sum * > SHA256SUMS
-      - name: Publish
+      - name: Create tag (manual run)
+        if: github.event_name == 'workflow_dispatch'
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          TAG: ${{ inputs.tag }}
+        run: |
+          git tag "$TAG"
+          git push origin "$TAG"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
