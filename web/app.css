@@ -54,9 +54,10 @@
   --user-ink: var(--color-accent-700);
   --agent: var(--color-neutral-700);
   --agent-ink: var(--color-neutral-800);
-  --mark-user: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  --mark-agent: color-mix(in srgb, var(--color-neutral-700) 13%, transparent);
   --mark-hot: color-mix(in srgb, var(--color-accent) 32%, transparent);
+  /* 重点：荧光笔黄，不分作者 */
+  --mark-key: color-mix(in srgb, #f5c542 42%, transparent);
+  --mark-key-hot: color-mix(in srgb, #eaa920 58%, transparent);
 
   --essay-size: 18px;
   --essay-lh: 1.85;
@@ -97,9 +98,9 @@
     --shadow-sm: 0 0 0 1px color-mix(in srgb, #fff 6%, transparent), 0 1px 2px #0006;
     --shadow-md: 0 0 0 1px color-mix(in srgb, #fff 7%, transparent), 0 3px 10px #0008;
     --shadow-lg: 0 0 0 1px color-mix(in srgb, #fff 8%, transparent), 0 12px 32px #000a;
-    --mark-user: color-mix(in srgb, var(--color-accent) 24%, transparent);
-    --mark-agent: color-mix(in srgb, #e8e3d9 12%, transparent);
     --mark-hot: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    --mark-key: color-mix(in srgb, #d9a628 34%, transparent);
+    --mark-key-hot: color-mix(in srgb, #e8b53a 52%, transparent);
     color-scheme: dark;
   }
 }
@@ -315,8 +316,7 @@ sup.sn { font-size: 10px; line-height: 0; margin-left: 1px; cursor: pointer; }
 
 /* 高亮线型：底色=重点，实线=亮点，虚线=疑问，波浪线=问题/纠错 */
 mark.m { background: transparent; color: inherit; padding: 0; border-radius: 1px; }
-mark.k-highlight.us { background: var(--mark-user); }
-mark.k-highlight.ag { background: var(--mark-agent); }
+mark.k-highlight { background: var(--mark-key); }
 mark.k-good { border-bottom: 1.5px solid var(--user); }
 mark.k-good.ag { border-bottom-color: var(--agent); }
 mark.k-question { border-bottom: 1.5px dashed var(--user); }
@@ -324,10 +324,13 @@ mark.k-question.ag { border-bottom-color: var(--agent); }
 mark.k-issue, mark.k-correction { text-decoration: underline wavy var(--user); text-decoration-thickness: 1px; text-underline-offset: 4px; text-decoration-skip-ink: none; }
 mark.k-issue.ag, mark.k-correction.ag { text-decoration-color: var(--agent); }
 mark.m.hot { background: var(--mark-hot); }
+mark.m.k-highlight.hot { background: var(--mark-key-hot); }
 mark.pending { background: color-mix(in srgb, var(--color-accent) 28%, transparent); }
 
 /* 边注簇 */
 .cluster { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 1.45; }
+.cluster.all { gap: 12px; line-height: 1.6; }
+.cluster.all .note.wide .md { color: var(--color-neutral-800); }
 .cluster.expanded { z-index: 5; background: var(--paper); box-shadow: 0 0 0 6px var(--paper), var(--shadow-md); border-radius: var(--radius-sm); }
 .cl-head { display: flex; justify-content: space-between; gap: 6px; font-size: 10.5px; color: var(--color-neutral-600); border-bottom: 1px solid var(--color-divider); padding-bottom: 2px; }
 .margin.l .cl-head { flex-direction: row-reverse; }
@@ -404,7 +407,7 @@ mark.pending { background: color-mix(in srgb, var(--color-accent) 28%, transpare
 .kind-btn .key { font-size: 9.5px; color: var(--color-neutral-600); font-variant-numeric: tabular-nums; }
 .kind-btn:hover { border-color: var(--color-accent); }
 .kind-btn.on { background: var(--color-accent-100); color: var(--color-accent-800); border-color: var(--color-accent); }
-.kind-btn.k-highlight { box-shadow: inset 0 -5px 0 var(--mark-user); }
+.kind-btn.k-highlight { box-shadow: inset 0 -5px 0 var(--mark-key); }
 .kind-btn.k-good { text-decoration: underline solid var(--user); text-underline-offset: 3px; }
 .kind-btn.k-issue { text-decoration: underline wavy var(--user); text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .kind-btn.k-question { text-decoration: underline dashed var(--user); text-underline-offset: 3px; }
@@ -519,7 +522,7 @@ body.no-essay .prompt-btns .btn { opacity: .45; pointer-events: none; }
 .hl-item { display: block; padding: 8px 10px 9px 12px; margin: 0 -10px 2px -12px; border-left: 2px solid transparent; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; cursor: pointer; text-decoration: none; color: inherit; }
 .hl-item:hover, .hl-item:focus-visible { background: color-mix(in srgb, var(--color-accent) 7%, transparent); border-left-color: var(--color-accent); }
 .hl-quote { font-family: var(--font-essay); font-size: 16.5px; line-height: 1.6; }
-.hl-quote mark { background: var(--mark-user); color: inherit; border-radius: 1px; }
+.hl-quote mark { background: var(--mark-key); color: inherit; border-radius: 1px; }
 .hl-note { font-size: 13px; line-height: 1.55; color: var(--color-neutral-800); margin-top: 3px; }
 .hl-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--color-neutral-600); margin-top: 4px; }
 .hl-meta .lb { color: var(--color-accent-700); }

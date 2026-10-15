@@ -23,6 +23,7 @@ EssayPilot 不调用模型：评分、润色、批注都由你完成，再通过
 
 - `quote` 逐字摘自当前正文，短而唯一；重复出现用 `occurrence`（从 1 起）。返回结果里带 `error` 的条目是没找到原文，改 quote 后重试。
 - kind：`highlight` 重点 / `good` 亮点 / `issue` 问题 / `question` 疑问 / `correction` 纠错（必须带 `suggestion`）。note 写具体问题，不写空话。
+- note 要短：一句话点明这句的作用或适用场景（如“开头点明来意”“万能请求句型”），不解释字面意思、不复述原文。重点的 note 不超过 20 字，也可以只写 label（如“开头”“要点一”“结尾”）；纠错的 note 只说错在哪。
 
 ## 题目与标签
 

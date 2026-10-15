@@ -21,6 +21,7 @@ const mcpInstructions = `EssayPilot 是考研作文（英语 Part A/B、政治�
 - 用户说“这篇”“这一句”时，先调用 get_ui_context，看用户当前打开的是哪篇、选中了什么文字。
 - 评分流程：get_rubric → get_essay → submit_evaluation（一次提交总分、档次、四维分、总评、亮点短板、润色稿与纠错项）。四维之和必须等于总分，每维不超过自己的满分。
 - 标注（annotate）与纠错（corrections）的 quote 必须逐字摘自当前正文（包括标点），尽量短而唯一；同一片段多次出现时用 occurrence 指明第几处。纠错类标注要带 suggestion，用户可一键采纳。
+- 边注（note）要短：一句话点明这句在文中的作用或适用场景（如“开头点明来意”“列举可带物品”“万能请求句型”），不解释句子字面意思、不复述原文。重点（highlight）的 note 不超过 20 字，也可以只写 label；纠错的 note 只说错在哪。
 - 用户自己做的标注（author = user）是他们的疑问或关注点：用 reply 回答，不要删除或改写用户的标注。
 - 不确定题型规格、分类或维度时调用 list_types。`
 
@@ -182,8 +183,8 @@ type annotateItemIn struct {
 	Quote      string  `json:"quote" jsonschema:"逐字摘自当前正文的片段（含标点），尽量短而唯一"`
 	Occurrence int     `json:"occurrence,omitempty" jsonschema:"quote 在正文中多次出现时指定第几处，从 1 开始，默认 1"`
 	Kind       string  `json:"kind" jsonschema:"highlight 重点 / good 亮点 / issue 问题 / question 疑问 / correction 纠错"`
-	Label      string  `json:"label,omitempty" jsonschema:"细分类，如纠错类别（英语 spelling/grammar/collocation/polish，政治 concept/analysis/discourse/structure/grammar）"`
-	Note       string  `json:"note,omitempty" jsonschema:"边注正文，一两句话说清具体问题或好在哪里；可写简单 markdown"`
+	Label      string  `json:"label,omitempty" jsonschema:"细分类：纠错类别（英语 spelling/grammar/collocation/polish，政治 concept/analysis/discourse/structure/grammar）；重点可写所在位置或作用，如“开头”“要点一”“结尾”"`
+	Note       string  `json:"note,omitempty" jsonschema:"边注，一句话点明作用或适用场景，不解释字面意思、不复述原文；重点不超过 20 字，纠错只说错在哪；可写简单 markdown"`
 	Suggestion *string `json:"suggestion,omitempty" jsonschema:"替换文本；kind 为 correction 时必填，用户可一键采纳"`
 }
 
@@ -268,7 +269,7 @@ type correctionIn struct {
 	Occurrence  int    `json:"occurrence,omitempty" jsonschema:"quote 多次出现时指定第几处，从 1 开始"`
 	Corrected   string `json:"corrected" jsonschema:"修改后的文本"`
 	Kind        string `json:"kind" jsonschema:"纠错类别，见 get_rubric 的 correctionKinds"`
-	Explanation string `json:"explanation" jsonschema:"为什么改、会因此丢什么分"`
+	Explanation string `json:"explanation" jsonschema:"一句话：错在哪、会因此丢什么分；不复述原文"`
 }
 
 type submitEvaluationIn struct {

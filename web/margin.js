@@ -68,7 +68,7 @@ export function layoutSide(container, side, groups, geo, ctx) {
     const expanded = !all && ctx.expanded.has(key);
     const corr = items.filter((a) => a.kind === 'correction' && a.suggestion != null);
     const cl = document.createElement('div');
-    cl.className = 'cluster' + (expanded ? ' expanded' : '');
+    cl.className = 'cluster' + (expanded ? ' expanded' : '') + (all ? ' all' : '');
     cl.dataset.key = key;
     let html = '';
     if (corr.length >= 2) {

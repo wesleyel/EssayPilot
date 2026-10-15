@@ -33,7 +33,7 @@ func PromptText(name string, d EssayDetail) (string, error) {
 1. 调用 get_essay(id="%[1]s") 确认最新正文（下方附的是生成提示词时的快照，若不一致以 get_essay 为准）；可用 list_annotations(essay_id="%[1]s", author="user") 查看用户自己的标记，评分时一并回应。
 2. 对照下方阅卷细则（也可调用 get_rubric(essay_id="%[1]s") 获取）逐维评分，确定档次。
 3. 调用 submit_evaluation(essay_id="%[1]s", ...) 一次性提交：score、band、dimensions 四维（content/language/structure/convention，各含 score 与 feedback）、overall_comment、strengths、weaknesses、polished、corrections。四维之和必须等于 score，每维不超过自己的满分；被拒时按错误信息修正后重新提交。
-4. 如有值得单独指出的亮点或问题，可再调用 annotate 补充 good / issue 边注（quote 必须逐字摘自正文）。`, e.ID)
+4. 如有值得单独指出的亮点或问题，可再调用 annotate 补充 good / issue 边注（quote 必须逐字摘自正文；note 一句话点明作用或问题，不解释字面意思）。`, e.ID)
 		guide = "【阅卷细则】\n" + Rubric(spec)
 	case "polish_essay":
 		steps = fmt.Sprintf(`请润色 EssayPilot 中的作答（essay_id = %[1]s），只改不打分。服务端不调用模型，润色由你完成，再用 essaypilot MCP 工具写回。
@@ -41,7 +41,7 @@ func PromptText(name string, d EssayDetail) (string, error) {
 【操作步骤】
 1. 调用 get_essay(id="%[1]s") 确认最新正文（下方附的是生成提示词时的快照，若不一致以 get_essay 为准）。
 2. 按下方润色要求，找出必须修改之处。不要直接改写正文（不要调用 update_essay）。
-3. 调用 annotate(essay_id="%[1]s", items=[...]) 批量提交修改建议：每条 kind="correction"，quote 为逐字摘自正文的最小片段（同一片段多次出现时用 occurrence 指明第几处），suggestion 为替换后的文本，label 可写纠错类别（%[2]s），note 用一两句话说明为什么改。
+3. 调用 annotate(essay_id="%[1]s", items=[...]) 批量提交修改建议：每条 kind="correction"，quote 为逐字摘自正文的最小片段（同一片段多次出现时用 occurrence 指明第几处），suggestion 为替换后的文本，label 可写纠错类别（%[2]s），note 一句话说明错在哪，不复述原文。
 4. 检查返回结果，未找到原文的条目修正 quote 后重新提交。用户会在界面上逐条采纳（也可在用户要求时调用 apply_suggestions 一次性采纳）。`, e.ID, correctionKindList(spec.Subject))
 		guide = "【润色要求】\n" + polishGuide(spec)
 	case "review_my_marks":
