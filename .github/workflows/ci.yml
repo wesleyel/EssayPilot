@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [v2]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -16,4 +17,4 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./...
-      - run: CGO_ENABLED=0 go build -o essaypilot .
+      - run: CGO_ENABLED=0 go build -o essaypilot ./cmd/essaypilot
