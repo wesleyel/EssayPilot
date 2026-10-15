@@ -71,14 +71,15 @@ function tools(app) {
     },
     {
       name: 'highlight',
-      description: '在作文正文上做标注：给出原文 quote（多次出现时用 occurrence 指定第几处，从 1 开始）、类型 kind 与边注 note。纠错（correction）必须带替换文本 suggestion。',
+      description: '在作文正文上做标注：给出原文 quote（多次出现时用 occurrence 指定第几处，从 1 开始）、类型 kind 与边注 note。纠错（correction）必须带替换文本 suggestion。重点（highlight）只画可复用的开头句、结尾句、承接过渡词句和万能句型，不画只属于本篇的细节句；label 写使用场景（如“开头表明来意”“转另一个话题”），note 留空。其他边注只写一句，不复述原文。',
       inputSchema: {
         type: 'object',
         properties: {
           quote: { type: 'string', description: '要标注的原文，须与正文逐字一致' },
           occurrence: { type: 'integer', minimum: 1 },
           kind: { type: 'string', enum: KINDS, description: 'highlight 重点 / good 亮点 / issue 问题 / question 疑问 / correction 纠错' },
-          note: { type: 'string', description: '边注正文' },
+          label: { type: 'string', description: '细分类；重点写使用场景（2–6 字），纠错写纠错类别' },
+          note: { type: 'string', description: '边注正文：一句话点明作用或错在哪；重点留空' },
           suggestion: { type: 'string', description: '替换文本（correction 必填）' },
           essay_id: { type: 'string', description: '缺省为当前作文' },
         },
@@ -88,6 +89,7 @@ function tools(app) {
         const id = essayIdOf(app, i);
         await withFlush(id);
         const item = { quote: i.quote, kind: i.kind, note: i.note || '' };
+        if (i.label) item.label = i.label;
         if (i.occurrence) item.occurrence = i.occurrence;
         if (i.suggestion !== undefined) item.suggestion = i.suggestion;
         const r = await API.post(`/essays/${encodeURIComponent(id)}/annotations`, { items: [item] }, OPT);

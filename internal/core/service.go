@@ -485,7 +485,7 @@ func (s *Service) ListAnnotations(essayID string, f AnnotationFilter) ([]Annotat
 // ListHighlights 列出全部作文里仍挂在正文上的重点（kind=highlight、顶层、状态 open），
 // 按作文更新时间倒序、同篇按位置排列。
 func (s *Service) ListHighlights() ([]HighlightItem, error) {
-	rows, err := s.db.Query(`SELECT `+prefixCols("a.", annotationCols)+`, e.title, e.subject, e.type, e.category, e.tags
+	rows, err := s.db.Query(`SELECT ` + prefixCols("a.", annotationCols) + `, e.title, e.subject, e.type, e.category, e.tags
 		FROM annotations a JOIN essays e ON e.id = a.essay_id
 		WHERE a.kind = 'highlight' AND a.parent_id IS NULL AND a.status = 'open'
 		ORDER BY e.updated_at DESC, e.rowid DESC, a.start_pos, a.created_at, a.rowid`)

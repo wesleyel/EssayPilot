@@ -34,7 +34,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 | `submit_evaluation` | essay_id, score, band, dimensions, overall_comment, strengths, weaknesses, polished, corrections? | 提交评分；服务端会校验各维度满分以及维度分之和，并自动生成版本快照 |
 | `delete_evaluation` | essay_id, evaluation_id | |
 
-标注类型 `kind` 有五种：`highlight` 重点、`good` 亮点、`issue` 问题、`question` 疑问、`correction` 纠错。其中 `correction` 必须带 `suggestion`。边注 `note` 按 Markdown 渲染（粗体、斜体、删除线、行内代码、链接、列表、引用），不渲染原始 HTML。
+标注类型 `kind` 有五种：`highlight` 重点、`good` 亮点、`issue` 问题、`question` 疑问、`correction` 纠错。其中 `correction` 必须带 `suggestion`。重点只画可复用的开头句、结尾句、承接过渡词句和万能句型，`label` 写使用场景、`note` 留空（标准见 `core.HighlightRule`，也可用 prompt `mark_highlights`）。边注 `note` 按 Markdown 渲染（粗体、斜体、删除线、行内代码、链接、列表、引用），不渲染原始 HTML。
 
 ### Resources
 
@@ -46,6 +46,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 - `grade_essay(essay_id)`：评分、纠错、写润色稿，最后调用 `submit_evaluation` 写回
 - `polish_essay(essay_id)`：只润色不打分，修改以纠错边注的形式给出
 - `review_my_marks(essay_id)`：逐条回应用户做的标记
+- `mark_highlights(essay_id)`：按重点标准画出可复用的开头句、结尾句、承接过渡词句和万能句型，`label` 写使用场景
 
 界面底部的「复制 …」按钮会把这些提示词生成好的全文复制到剪贴板，可以直接粘贴给任何 Agent，包括没有接入 MCP 的 Agent（它会按提示词去调用 REST）。
 

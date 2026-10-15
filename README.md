@@ -56,7 +56,7 @@ internal/core/    领域与业务层
   model.go        科目、题型、分类、评分维度、纠错类别
   types.go        实体与输入类型（REST、MCP、前端共用的 JSON 形状）
   rubric.go       阅卷细则（以 MCP 资源和提示词的形式提供给 Agent）
-  prompts.go      grade_essay / polish_essay / review_my_marks
+  prompts.go      grade_essay / polish_essay / review_my_marks / mark_highlights
   store.go        SQLite
   anchor.go       标注锚定：正文修改后，标注跟着原文移动
   service.go      业务层（REST 与 MCP 共用）

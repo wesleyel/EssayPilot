@@ -8,13 +8,17 @@ import (
 	"strings"
 )
 
+// HighlightRule 是“重点”标注的统一标准，MCP 说明与提示词共用。
+const HighlightRule = `重点（highlight）只画能在别的作文里复用的句子：开头句、结尾句、承接与过渡词句（如 To begin with、As for…）、万能句型；不画只属于这篇内容的细节句，不确定能否复用就不画。label 写使用场景（2–6 字，如“开头表明来意”“引出第一点”“转另一个话题”“请求帮忙”“结尾祝愿”），note 留空，不解释字面意思。`
+
 // PromptNames 是支持的提示词名称，顺序即展示顺序。
-var PromptNames = []string{"grade_essay", "polish_essay", "review_my_marks"}
+var PromptNames = []string{"grade_essay", "polish_essay", "review_my_marks", "mark_highlights"}
 
 var PromptDescriptions = map[string]string{
 	"grade_essay":     "按考研阅卷细则给这篇作答评分、纠错、写润色稿，并通过 submit_evaluation 写回",
 	"polish_essay":    "只润色不打分：以纠错边注（可一键采纳）的形式给出最小必要修改",
 	"review_my_marks": "逐条回应用户自己在正文上做的标记：回答疑问、对问题给出纠错建议",
+	"mark_highlights": "画出可复用的重点句（开头、结尾、承接过渡、万能句型），label 写使用场景",
 }
 
 // PromptText 生成指定提示词的完整文本。
@@ -33,7 +37,8 @@ func PromptText(name string, d EssayDetail) (string, error) {
 1. 调用 get_essay(id="%[1]s") 确认最新正文（下方附的是生成提示词时的快照，若不一致以 get_essay 为准）；可用 list_annotations(essay_id="%[1]s", author="user") 查看用户自己的标记，评分时一并回应。
 2. 对照下方阅卷细则（也可调用 get_rubric(essay_id="%[1]s") 获取）逐维评分，确定档次。
 3. 调用 submit_evaluation(essay_id="%[1]s", ...) 一次性提交：score、band、dimensions 四维（content/language/structure/convention，各含 score 与 feedback）、overall_comment、strengths、weaknesses、polished、corrections。四维之和必须等于 score，每维不超过自己的满分；被拒时按错误信息修正后重新提交。
-4. 如有值得单独指出的亮点或问题，可再调用 annotate 补充 good / issue 边注（quote 必须逐字摘自正文；note 一句话点明作用或问题，不解释字面意思）。`, e.ID)
+4. 如有值得单独指出的亮点或问题，可再调用 annotate 补充 good / issue 边注（quote 必须逐字摘自正文；note 一句话点明作用或问题，不解释字面意思）。
+5. 再按以下标准画出重点句：%[2]s`, e.ID, HighlightRule)
 		guide = "【阅卷细则】\n" + Rubric(spec)
 	case "polish_essay":
 		steps = fmt.Sprintf(`请润色 EssayPilot 中的作答（essay_id = %[1]s），只改不打分。服务端不调用模型，润色由你完成，再用 essaypilot MCP 工具写回。
@@ -55,11 +60,26 @@ func PromptText(name string, d EssayDetail) (string, error) {
    - kind=highlight / good：用 reply 简短确认好在哪里，或指出可以更进一步之处。
 3. 回答要具体、对照考研阅卷标准，不写空话。`, e.ID)
 		guide = "【参考要求】\n" + polishGuide(spec) + "\n\n【用户标记快照】\n" + userMarksText(d)
+	case "mark_highlights":
+		steps = fmt.Sprintf(`请为 EssayPilot 中的作答（essay_id = %[1]s）标出重点句，便于用户积累可复用的表达。
+
+【标注标准】
+%[2]s
+
+【操作步骤】
+1. 调用 get_essay(id="%[1]s") 确认最新正文与已有标注（下方附的是生成提示词时的快照，若不一致以 get_essay 为准）。
+2. 按上面的标准挑句子。quote 取能直接套用的整块：开头、结尾和万能句型取整句或完整句架，承接过渡只取连接词或短语本身。
+3. 调用 annotate(essay_id="%[1]s", items=[...]) 一次提交：每条 kind="highlight"，label 写使用场景，不写 note。
+4. 已有的重点里，用户自己的（author = user）不要动；你（Agent）之前画的若不符合标准，用 update_annotation 改 label 或 delete_annotation 删除。`, e.ID, HighlightRule)
 	default:
 		return "", &ValidationError{Msg: fmt.Sprintf("未知提示词：%s（可选 %s）", name, strings.Join(PromptNames, " / "))}
 	}
 
-	return strings.Join([]string{steps, guide, essayInfoText(spec, e)}, "\n\n"), nil
+	parts := []string{steps}
+	if guide != "" {
+		parts = append(parts, guide)
+	}
+	return strings.Join(append(parts, essayInfoText(spec, e)), "\n\n"), nil
 }
 
 func essayInfoText(spec TypeSpec, e Essay) string {

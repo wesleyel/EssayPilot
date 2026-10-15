@@ -21,7 +21,7 @@ const mcpInstructions = `EssayPilot 是考研作文（英语 Part A/B、政治�
 - 用户说“这篇”“这一句”时，先调用 get_ui_context，看用户当前打开的是哪篇、选中了什么文字。
 - 评分流程：get_rubric → get_essay → submit_evaluation（一次提交总分、档次、四维分、总评、亮点短板、润色稿与纠错项）。四维之和必须等于总分，每维不超过自己的满分。
 - 标注（annotate）与纠错（corrections）的 quote 必须逐字摘自当前正文（包括标点），尽量短而唯一；同一片段多次出现时用 occurrence 指明第几处。纠错类标注要带 suggestion，用户可一键采纳。
-- 重点（highlight）只画能在别的作文里复用的句子：开头句、结尾句、承接与过渡词句（如 To begin with、As for…）、万能句型；不画只属于这篇内容的细节句，不确定能否复用就不画。label 写使用场景（2–6 字，如“开头表明来意”“引出第一点”“转另一个话题”“请求帮忙”“结尾祝愿”），note 留空，不解释字面意思。
+- ` + core.HighlightRule + `也可以用 prompt mark_highlights。
 - 其他边注（亮点、问题、疑问、纠错）只写一句，点明作用或错在哪，不复述原文。
 - 用户自己做的标注（author = user）是他们的疑问或关注点：用 reply 回答，不要删除或改写用户的标注。
 - 不确定题型规格、分类或维度时调用 list_types。`
