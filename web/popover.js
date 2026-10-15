@@ -1,4 +1,4 @@
-// 选区浮层：类型（重点/亮点/问题/疑问，键 1-4）+ 边注输入，↵ 保存 · Esc 取消。也用于回复与编辑边注。
+// 选区浮层：类型（重点/亮点/问题/疑问，键 1-4）+ 边注输入（支持 Markdown），↵ 保存 · ⇧↵ 换行 · Esc 取消。也用于回复与编辑边注。
 
 import { esc } from './util.js';
 
@@ -19,7 +19,7 @@ function ensure() {
   });
   el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-kind]');
-    if (b) { setKind(b.dataset.kind); el.querySelector('input').focus(); }
+    if (b) { setKind(b.dataset.kind); el.querySelector('.pop-input').focus(); }
     const s = e.target.closest('[data-save]');
     if (s) save();
     const c = e.target.closest('[data-cancel]');
@@ -54,7 +54,7 @@ function place() {
 
 async function save() {
   if (!cur || cur.saving) return;
-  const input = el.querySelector('input');
+  const input = el.querySelector('.pop-input');
   cur.saving = true;
   input.disabled = true;
   try {
@@ -85,14 +85,14 @@ export function show(opts) {
   const showKinds = cur.mode !== 'reply' && cur.kind !== 'correction';
   el.innerHTML = `${cur.heading ? `<div class="pop-head">${esc(cur.heading)}</div>` : ''}
     ${showKinds ? `<div class="pop-kinds" role="radiogroup" aria-label="标注类型">${KINDS.map(([k, l], i) => `<button type="button" class="kind-btn k-${k}" data-kind="${k}" role="radio" title="${l}（${i + 1}）">${l}<span class="key">${i + 1}</span></button>`).join('')}</div>` : ''}
-    <input class="input pop-input" placeholder="${cur.mode === 'reply' ? '回复…' : '边注（可留空，只做高亮）'}" value="${esc(cur.note || '')}" aria-label="边注">
-    <div class="pop-hint"><span>↵ 保存 · Esc 取消</span><span class="sp"></span><button type="button" class="btn btn-ghost btn-xs" data-cancel>取消</button><button type="button" class="btn btn-primary btn-xs" data-save>保存</button></div>`;
+    <textarea class="input pop-input" rows="${(cur.note || '').includes('\n') ? 4 : 2}" placeholder="${cur.mode === 'reply' ? '回复…' : '边注（可留空，只做高亮）'}" aria-label="边注">${esc(cur.note || '')}</textarea>
+    <div class="pop-hint"><span>↵ 保存 · ⇧↵ 换行 · 支持 Markdown</span><span class="sp"></span><button type="button" class="btn btn-ghost btn-xs" data-cancel>取消</button><button type="button" class="btn btn-primary btn-xs" data-save>保存</button></div>`;
   el.hidden = false;
   setKind(cur.kind);
-  const input = el.querySelector('input');
+  const input = el.querySelector('.pop-input');
   input.addEventListener('keydown', (e) => {
     if (e.isComposing || e.keyCode === 229) return;
-    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
     else if (e.key === 'Escape') { e.preventDefault(); hide(true); }
     else if (/^[1-4]$/.test(e.key) && (e.altKey || !input.value) && cur.mode !== 'reply' && !e.metaKey && !e.ctrlKey) {
       e.preventDefault();
@@ -111,7 +111,7 @@ export function handleEditorKey(e) {
   if (/^[1-4]$/.test(e.key)) {
     e.preventDefault();
     setKind(KINDS[+e.key - 1][0]);
-    el.querySelector('input').focus();
+    el.querySelector('.pop-input').focus();
     return true;
   }
   if (e.key === 'Enter') { e.preventDefault(); save(); return true; }

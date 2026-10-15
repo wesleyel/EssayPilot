@@ -189,6 +189,16 @@ type AnnotateResult struct {
 	Error      string      `json:"error,omitempty"`
 }
 
+// HighlightItem 是跨作文的重点句：一条 kind=highlight 的顶层标注，附带所在作文的归类信息。
+type HighlightItem struct {
+	Annotation
+	EssayTitle    string   `json:"essayTitle"`
+	EssaySubject  Subject  `json:"essaySubject"`
+	EssayType     string   `json:"essayType"`
+	EssayCategory string   `json:"essayCategory"`
+	EssayTags     []string `json:"essayTags"`
+}
+
 type AnnotationFilter struct {
 	Author string `json:"author,omitempty"` // "user" / "agent"（前缀匹配 agent:*）/ 完整作者名
 	Kind   string `json:"kind,omitempty"`

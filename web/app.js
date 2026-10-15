@@ -1,9 +1,9 @@
 // EssayPilot v2 前端主模块：状态、列表抽屉、批阅视图、版本视图、SSE、底部 Agent 栏。
 
 import * as API from './api.js';
-import { esc, icon, debounce, fmtTime, fmtScore, SUBJECT_LABEL, shortDim, authorName, isAgent, toast, errToast, openDialog, confirmDialog, tagInput, compressImage, copyText } from './util.js';
+import { esc, icon, debounce, fmtTime, fmtScore, SUBJECT_LABEL, shortDim, authorName, isAgent, toast, errToast, openDialog, confirmDialog, tagInput, compressImage, copyText, md, mdLine } from './util.js';
 import { Editor, renderReading, readingSelection, paragraphsOf, paragraphIndexAt } from './editor.js';
-import { layoutSide, belowNotesHTML } from './margin.js';
+import { layoutSide, belowNotesHTML, sideOf } from './margin.js';
 import * as pop from './popover.js';
 import { renderVersions, setPick } from './versions.js';
 import { shiftAnnotations } from './diff.js';
@@ -26,7 +26,7 @@ const S = {
   lastValue: '',
   anns: [],
   view: 'review',
-  density: store.get('density', 'cluster'),
+  expandAll: store.get('expandAll', '0') === '1',
   editing: false,
   hotId: null,
   hotFrom: null,
@@ -41,10 +41,13 @@ const S = {
   ui: null,
   saveState: '',
   pendingType: null,
+  pendingPin: null,
+  hl: { items: [], loaded: false, q: '', subj: '', group: store.get('hlGroup', 'category'), collapsed: new Set() },
 };
 
 const narrowMQ = window.matchMedia('(max-width: 899px)');
-const isBelow = () => narrowMQ.matches || S.density === 'below';
+// 窄屏放不下页边：边注落到段后。
+const isBelow = () => narrowMQ.matches;
 
 // ---------------------------------------------------------------- 派生数据
 
@@ -126,6 +129,7 @@ function applyDetail(d) {
     setEditorValue(d.essay.content);
     S.anns = d.annotations;
     S.pinnedId = S.hotId = S.caretId = null;
+    if (S.pendingPin && d.annotations.some((a) => a.id === S.pendingPin)) S.pinnedId = S.pendingPin;
     S.expanded.clear();
     S.pendingType = null;
   } else {
@@ -147,7 +151,8 @@ async function loadEssay(id, { quiet } = {}) {
     const d = await API.get(`/essays/${encodeURIComponent(id)}`);
     if (S.id && S.id !== id && isDirty()) await saveContent();
     applyDetail(d);
-    $('#empty').hidden = true;
+    if (S.view !== 'highlights') $('#empty').hidden = true;
+    revealPinned();
     reportUI();
     window.dispatchEvent(new CustomEvent('essaypilot:change', { detail: { id } }));
   } catch (e) {
@@ -178,7 +183,7 @@ function closeEssay() {
   S.anns = [];
   setEditorValue('');
   S.serverContent = '';
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (location.hash && S.view !== 'highlights') history.replaceState(null, '', location.pathname + location.search);
   renderAll();
   window.dispatchEvent(new CustomEvent('essaypilot:change', { detail: { id: null } }));
 }
@@ -213,7 +218,7 @@ function onSelection(sel) {
 }
 
 function reportUI(sel) {
-  if (!S.id) { putUISoon({ essayId: '', selectionStart: 0, selectionEnd: 0, selectionText: '' }); return; }
+  if (!S.id || S.view === 'highlights') { putUISoon({ essayId: '', selectionStart: 0, selectionEnd: 0, selectionText: '' }); return; }
   const s = sel || editor.selection();
   putUISoon({ essayId: S.id, selectionStart: s.start, selectionEnd: s.end, selectionText: editor.value.slice(s.start, s.end) });
 }
@@ -410,9 +415,19 @@ function typeSpec(id) {
 
 function renderAll() {
   const d = S.detail;
-  document.body.classList.toggle('no-essay', !d);
-  $('#empty').hidden = !!d;
+  const hl = S.view === 'highlights';
+  document.body.classList.toggle('no-essay', !d || hl);
+  $('#empty').hidden = !!d || hl;
+  $('#highlights').hidden = !hl;
+  $('#btn-highlights').classList.toggle('on', hl);
   renderTop();
+  if (hl) {
+    $('#review').hidden = true;
+    $('#versions').hidden = true;
+    renderHighlights();
+    renderSees();
+    return;
+  }
   if (!d) {
     $('#review').hidden = true;
     $('#versions').hidden = true;
@@ -434,7 +449,10 @@ function renderAll() {
 function renderTop() {
   const d = S.detail;
   const crumbs = $('#crumbs');
-  if (!d) {
+  if (S.view === 'highlights') {
+    crumbs.innerHTML = '<span class="brand">EssayPilot</span><span class="crumb-sub">/ 重点句</span>';
+    $('#top-score').innerHTML = '';
+  } else if (!d) {
     crumbs.innerHTML = '<span class="brand">EssayPilot</span>';
     $('#top-score').innerHTML = '';
   } else {
@@ -448,7 +466,7 @@ function renderTop() {
     b.setAttribute('aria-selected', b.dataset.view === S.view);
     b.disabled = !d;
   });
-  document.title = d ? `${d.essay.title || '未命名'} · EssayPilot` : 'EssayPilot';
+  document.title = S.view === 'highlights' ? '重点句 · EssayPilot' : d ? `${d.essay.title || '未命名'} · EssayPilot` : 'EssayPilot';
 }
 
 function renderScorebar() {
@@ -564,7 +582,9 @@ function renderMarks() {
   const below = isBelow();
   const desk = $('#desk');
   desk.classList.toggle('below', below);
-  $('#density').querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.d === (below ? 'below' : 'cluster')); b.disabled = narrowMQ.matches; });
+  const ea = $('#expand-all');
+  ea.classList.toggle('on', S.expandAll);
+  ea.setAttribute('aria-pressed', S.expandAll);
   const showEditor = !below || S.editing;
   $('#editor').hidden = !showEditor;
   $('#reading').hidden = showEditor;
@@ -589,8 +609,7 @@ function renderMarks() {
 function groupByPara(D, paras, side) {
   const groups = new Map();
   for (const a of D.vis) {
-    if (side === 'L' && isAgent(a.author)) continue;
-    if (side === 'R' && !isAgent(a.author)) continue;
+    if (side && sideOf(a) !== side) continue;
     const i = paragraphIndexAt(paras, a.start);
     if (!groups.has(i)) groups.set(i, []);
     groups.get(i).push(a);
@@ -599,7 +618,7 @@ function groupByPara(D, paras, side) {
 }
 
 function ctxFor(D) {
-  return { numbers: D.numbers, replies: D.replies, openId: openId(), hotId: S.hotId, expanded: S.expanded, markTop: (id) => editor.markTop(id) };
+  return { numbers: D.numbers, replies: D.replies, openId: openId(), hotId: S.hotId, expanded: S.expanded, expandAll: S.expandAll, markTop: (id) => editor.markTop(id) };
 }
 
 function layoutMargins(freeze = false) {
@@ -628,16 +647,16 @@ function layoutMargins(freeze = false) {
     for (const cl of el.querySelectorAll('.cluster')) prevTops.set(cl.dataset.key + side, parseFloat(cl.style.top));
   }
   const n = D.vis.length;
-  const nu = D.vis.filter((a) => !isAgent(a.author)).length;
-  $('#head-l').textContent = `我的批注 ${nu || ''}`;
-  $('#head-r').textContent = `Agent ${n - nu || ''}`;
+  const nl = D.vis.filter((a) => sideOf(a) === 'L').length;
+  $('#head-l').textContent = `重点 ${nl || ''}`;
+  $('#head-r').textContent = `问题 · 纠错 ${n - nl || ''}`;
 }
 
 function renderOrphans(D) {
   const el = $('#orphans');
   if (!D.orphans.length) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="orph-h">孤立标注 ${D.orphans.length}</div>` + D.orphans.map((a) => `<div class="orph">
-    <span class="${isAgent(a.author) ? 'ag' : 'us'}">“${esc(a.quote.length > 50 ? a.quote.slice(0, 50) + '…' : a.quote)}” 在正文中找不到${a.note ? ' · ' + esc(a.note) : ''} <span class="muted xsmall">${esc(authorName(a.author))}</span></span>
+    <span class="${isAgent(a.author) ? 'ag' : 'us'}">“${esc(a.quote.length > 50 ? a.quote.slice(0, 50) + '…' : a.quote)}” 在正文中找不到${a.note ? ' · ' + mdLine(a.note) : ''} <span class="muted xsmall">${esc(authorName(a.author))}</span></span>
     <button class="lnk" data-act="relocate" data-id="${esc(a.id)}" title="先在正文中选中新位置">重新定位</button><button class="lnk" data-act="delete" data-id="${esc(a.id)}">删除</button></div>`).join('');
 }
 
@@ -657,6 +676,7 @@ function renderActivity() {
 function renderSees() {
   const el = $('#sees');
   const u = S.ui;
+  if (S.view === 'highlights') { el.textContent = '重点句页（未打开作文）'; return; }
   if (!u || !u.essayId) { el.textContent = S.id ? '本篇 · 同步中…' : '未打开作文'; return; }
   if (u.essayId !== S.id) { el.textContent = '另一篇作文（' + u.essayId + '）'; return; }
   const paras = paragraphsOf(editor.value);
@@ -722,12 +742,101 @@ function renderList() {
   $('#tree').innerHTML = html || `<div class="muted small pad">${S.listQ || S.listTag ? '没有匹配的作文' : '还没有作文，点“新建”开始。'}</div>`;
 }
 
-function openDrawer(open) {
+// 宽屏：抽屉在主区左侧占位，打开时把内容推向右侧（记住开合状态）；窄屏：覆盖层 + 遮罩。
+function openDrawer(open, { focus = true } = {}) {
   const dr = $('#drawer');
   dr.classList.toggle('open', open);
-  $('#drawer-back').hidden = !open;
+  $('#drawer-back').hidden = !open || !narrowMQ.matches;
   dr.setAttribute('aria-hidden', !open);
-  if (open) { loadList(); setTimeout(() => $('#list-q').focus(), 50); }
+  if (!narrowMQ.matches) store.set('drawer', open ? 'open' : 'closed');
+  if (open) { loadList(); if (focus) setTimeout(() => $('#list-q').focus(), 50); }
+}
+
+// ---------------------------------------------------------------- 重点句页
+
+const HL_GROUPS = {
+  category: (h) => [h.essayCategory || '未分类'],
+  type: (h) => [typeSpec(h.essayType)?.label || h.essayType],
+  label: (h) => [h.label || '未标注'],
+  tag: (h) => (h.essayTags.length ? h.essayTags.map((t) => '#' + t) : ['无标签']),
+  essay: (h) => [h.essayTitle || '未命名'],
+};
+
+async function loadHighlights() {
+  try {
+    S.hl.items = await API.get('/highlights');
+    S.hl.loaded = true;
+    if (S.view === 'highlights') renderHighlights();
+  } catch (e) { errToast(e); }
+}
+const loadHighlightsSoon = debounce(loadHighlights, 300);
+
+// 转义并把搜索词包成 <mark>。
+function markQuery(text, q) {
+  if (!q) return esc(text);
+  const lo = text.toLowerCase(), ql = q.toLowerCase();
+  let out = '', i = 0, j;
+  while ((j = lo.indexOf(ql, i)) >= 0) {
+    out += esc(text.slice(i, j)) + '<mark>' + esc(text.slice(j, j + q.length)) + '</mark>';
+    i = j + q.length;
+  }
+  return out + esc(text.slice(i));
+}
+
+function renderHighlights() {
+  const H = S.hl;
+  $('#hl-group').value = H.group;
+  $('#hl-subj').querySelectorAll('[data-subj]').forEach((b) => b.classList.toggle('on', b.dataset.subj === H.subj));
+  const list = $('#hl-list');
+  if (!H.loaded) { list.innerHTML = '<div class="hl-empty">加载中…</div>'; return; }
+  const q = H.q.toLowerCase();
+  const items = H.items.filter((h) => (!H.subj || h.essaySubject === H.subj) && (!q ||
+    [h.quote, h.note, h.label, h.essayTitle, h.essayCategory, ...h.essayTags].some((x) => (x || '').toLowerCase().includes(q))));
+  $('#hl-count').textContent = items.length === H.items.length ? `共 ${items.length} 句` : `${items.length} / ${H.items.length} 句`;
+  if (!items.length) {
+    list.innerHTML = `<div class="hl-empty">${H.items.length ? '没有匹配的重点句' : '还没有重点句。在批阅页选中文字并标为“重点”，或让 Agent 自动标注。'}</div>`;
+    return;
+  }
+  const groups = new Map();
+  for (const h of items) {
+    for (const k of HL_GROUPS[H.group](h)) {
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(h);
+    }
+  }
+  const keys = [...groups.keys()];
+  if (H.group !== 'essay') keys.sort((a, b) => groups.get(b).length - groups.get(a).length || a.localeCompare(b, 'zh'));
+  list.innerHTML = keys.map((k) => {
+    const gk = H.group + ':' + k;
+    const open = !H.collapsed.has(gk);
+    const rows = groups.get(k);
+    return `<section class="hl-sec"><button class="hl-sec-h" data-hl-col="${esc(gk)}" aria-expanded="${open}"><span class="car">${open ? '▾' : '▸'}</span><span class="nm">${esc(k)}</span><span class="n">${rows.length}</span></button>
+      ${open ? rows.map((h) => `<a class="hl-item" href="#/e/${encodeURIComponent(h.essayId)}" data-hl-open="${esc(h.essayId)}" data-aid="${esc(h.id)}">
+        <div class="hl-quote">${markQuery(h.quote, H.q)}</div>
+        ${h.note ? `<div class="hl-note md">${md(h.note)}</div>` : ''}
+        <div class="hl-meta">${h.label && H.group !== 'label' ? `<span class="lb">${esc(h.label)}</span>` : ''}${H.group !== 'essay' ? `<span>${esc(h.essayTitle || '未命名')}</span>` : ''}<span>${esc(SUBJECT_LABEL[h.essaySubject] || h.essaySubject)} · ${esc(typeSpec(h.essayType)?.shortLabel || typeSpec(h.essayType)?.label || h.essayType)}</span><span>${esc(authorName(h.author))}</span></div>
+      </a>`).join('') : ''}</section>`;
+  }).join('');
+}
+
+// 从重点句页跳到作文，并展开、滚动到这条标注。
+function openAnnotation(essayId, aid) {
+  S.pendingPin = aid;
+  if (essayId === S.id && S.detail) {
+    S.pinnedId = aid;
+    go(essayId, 'review');
+    revealPinned();
+  } else go(essayId, 'review');
+}
+
+function revealPinned() {
+  const id = S.pendingPin;
+  if (!id) return;
+  S.pendingPin = null;
+  requestAnimationFrame(() => {
+    const m = document.querySelector(`#editor mark[data-id="${CSS.escape(id)}"], #reading mark[data-id="${CSS.escape(id)}"]`);
+    if (m) m.scrollIntoView({ block: 'center' });
+  });
 }
 
 function newEssayDialog() {
@@ -791,6 +900,7 @@ async function deleteEssay(id) {
 // ---------------------------------------------------------------- 路由
 
 function parseHash() {
+  if (/^#\/highlights\/?$/.test(location.hash)) return { highlights: true };
   const m = location.hash.match(/^#\/e\/([^/?#]+)(\/versions)?/);
   return m ? { id: decodeURIComponent(m[1]), view: m[2] ? 'versions' : 'review' } : null;
 }
@@ -803,11 +913,20 @@ function go(id, view = S.view) {
 
 function route() {
   const r = parseHash();
-  if (!r) { if (S.id) closeEssay(); else renderAll(); return; }
+  if (r && r.highlights) {
+    S.view = 'highlights';
+    pop.hide(true);
+    loadHighlights();
+    renderAll();
+    reportUI();
+    return;
+  }
+  if (!r) { if (S.view === 'highlights') S.view = 'review'; if (S.id) closeEssay(); else renderAll(); return; }
+  const wasHL = S.view === 'highlights';
   const viewChanged = S.view !== r.view;
   S.view = r.view;
   if (r.id !== S.id) loadEssay(r.id);
-  else if (viewChanged) renderAll();
+  else if (viewChanged) { renderAll(); if (wasHL) reportUI(); }
 }
 
 // ---------------------------------------------------------------- SSE
@@ -837,6 +956,7 @@ function handleEvent(ev) {
     return;
   }
   if (ev.type === 'ui-context') { fetchUISoon(); return; }
+  if (S.view === 'highlights' || S.hl.loaded) loadHighlightsSoon();
   if (ev.essayId && ev.essayId === S.id) {
     if (ev.type === 'deleted') { toast('当前作文已被删除'); closeEssay(); }
     else reloadSoon();
@@ -919,24 +1039,39 @@ function bind() {
     const col = e.target.closest('[data-col]');
     if (col) { const k = col.dataset.col; if (S.collapsed.has(k)) S.collapsed.delete(k); else S.collapsed.add(k); renderList(); return; }
     const o = e.target.closest('[data-open]');
-    if (o) { go(o.dataset.open, 'review'); if (window.innerWidth < 1100) openDrawer(false); renderList(); }
+    if (o) { go(o.dataset.open, 'review'); if (narrowMQ.matches) openDrawer(false); renderList(); }
   });
   $('#tree').addEventListener('keydown', (e) => {
     const o = e.target.closest('[data-open]');
     if (o && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); o.click(); }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && $('#drawer').classList.contains('open') && !document.querySelector('.dialog-backdrop')) openDrawer(false);
+    if (e.key === 'Escape' && narrowMQ.matches && $('#drawer').classList.contains('open') && !document.querySelector('.dialog-backdrop')) openDrawer(false);
   });
 
   document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { if (S.id) go(S.id, b.dataset.view); }));
-  $('#density').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-d]');
-    if (!b || narrowMQ.matches) return;
-    S.density = b.dataset.d;
-    store.set('density', S.density);
-    S.editing = false;
+  $('#expand-all').addEventListener('click', () => {
+    S.expandAll = !S.expandAll;
+    store.set('expandAll', S.expandAll ? '1' : '0');
+    S.expanded.clear();
     renderMarks();
+  });
+
+  $('#hl-q').addEventListener('input', debounce((e) => { S.hl.q = e.target.value.trim(); renderHighlights(); }, 150));
+  $('#hl-group').addEventListener('change', (e) => { S.hl.group = e.target.value; store.set('hlGroup', S.hl.group); renderHighlights(); });
+  $('#hl-subj').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-subj]');
+    if (!b) return;
+    S.hl.subj = b.dataset.subj;
+    renderHighlights();
+  });
+  $('#hl-list').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-hl-col]');
+    if (c) { const k = c.dataset.hlCol; if (S.hl.collapsed.has(k)) S.hl.collapsed.delete(k); else S.hl.collapsed.add(k); renderHighlights(); return; }
+    if (e.target.closest('.md a')) return;
+    const it = e.target.closest('[data-hl-open]');
+    // 拦住冒泡：document 上的点击处理会把刚固定的边注取消。
+    if (it && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); openAnnotation(it.dataset.hlOpen, it.dataset.aid); }
   });
   $('#edit-toggle').addEventListener('click', () => {
     S.editing = !S.editing;
@@ -944,7 +1079,12 @@ function bind() {
     renderMarks();
     if (S.editing) editor.ta.focus();
   });
-  narrowMQ.addEventListener('change', () => { S.editing = false; if (S.detail) renderMarks(); });
+  narrowMQ.addEventListener('change', () => {
+    S.editing = false;
+    // 跨过断点：宽屏恢复记住的抽屉状态，窄屏收起覆盖层。
+    openDrawer(!narrowMQ.matches && store.get('drawer', 'closed') === 'open', { focus: false });
+    if (S.detail) renderMarks();
+  });
   $('#info-toggle').addEventListener('click', () => { S.infoOpen = !S.infoOpen; renderInfo(); });
   $('#scorebar').addEventListener('click', (e) => {
     if (e.target.closest('#sb-toggle')) { S.scoreOpen = !S.scoreOpen; renderScorebar(); }
@@ -977,6 +1117,8 @@ function bind() {
 
   window.addEventListener('hashchange', route);
   window.addEventListener('resize', debounce(() => { if (S.detail && S.view === 'review') renderMarks(); }, 100));
+  // 抽屉推开/收回改变主区宽度：动画结束后重排边注。
+  $('#drawer').addEventListener('transitionend', (e) => { if (e.propertyName === 'width' && S.detail && S.view === 'review') renderMarks(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && isDirty()) saveContent(); });
   window.addEventListener('beforeunload', (e) => { if (isDirty()) { saveContent(); e.preventDefault(); e.returnValue = ''; } });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (S.detail) renderMarks(); });
@@ -997,7 +1139,8 @@ async function init() {
   API.get('/activity?limit=50').then((a) => { S.activity = a || []; renderActivity(); }).catch(() => renderActivity());
   API.get('/ui-context').then((u) => { S.ui = u; renderSees(); }).catch(() => {});
   connectSSE();
-  loadList();
+  if (!narrowMQ.matches && store.get('drawer', 'closed') === 'open') openDrawer(true, { focus: false });
+  else loadList();
   if (parseHash()) route();
   else { renderAll(); }
 

@@ -482,6 +482,36 @@ func (s *Service) ListAnnotations(essayID string, f AnnotationFilter) ([]Annotat
 	return out, nil
 }
 
+// ListHighlights 列出全部作文里仍挂在正文上的重点（kind=highlight、顶层、状态 open），
+// 按作文更新时间倒序、同篇按位置排列。
+func (s *Service) ListHighlights() ([]HighlightItem, error) {
+	rows, err := s.db.Query(`SELECT `+prefixCols("a.", annotationCols)+`, e.title, e.subject, e.type, e.category, e.tags
+		FROM annotations a JOIN essays e ON e.id = a.essay_id
+		WHERE a.kind = 'highlight' AND a.parent_id IS NULL AND a.status = 'open'
+		ORDER BY e.updated_at DESC, e.rowid DESC, a.start_pos, a.created_at, a.rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []HighlightItem{}
+	for rows.Next() {
+		var h HighlightItem
+		var tags string
+		var eid, pid, sug sql.NullString
+		a := &h.Annotation
+		if err := rows.Scan(&a.ID, &a.EssayID, &eid, &pid, &a.Start, &a.End, &a.Quote, &a.Prefix, &a.Suffix,
+			&a.Kind, &a.Label, &a.Note, &sug, &a.Author, &a.Status, &a.CreatedAt, &a.UpdatedAt,
+			&h.EssayTitle, &h.EssaySubject, &h.EssayType, &h.EssayCategory, &tags); err != nil {
+			return nil, err
+		}
+		a.EvaluationID, a.ParentID, a.Suggestion = strPtr(eid), strPtr(pid), strPtr(sug)
+		h.EssayTags = []string{}
+		_ = jsonUnmarshal(tags, &h.EssayTags)
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 func (s *Service) UpdateAnnotation(actor, id string, p AnnotationPatch) (Annotation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

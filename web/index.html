@@ -17,6 +17,7 @@
   <button id="btn-drawer" class="btn btn-icon" aria-label="作文列表" title="作文列表"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h16"/></svg></button>
   <nav class="crumbs" id="crumbs" aria-label="当前作文"><span class="brand">EssayPilot</span></nav>
   <span class="sp"></span>
+  <a id="btn-highlights" class="btn btn-secondary btn-sm" href="#/highlights">重点句</a>
   <span id="top-score" class="top-score" title="最新评分"></span>
   <span class="vr"></span>
   <div class="seg view-seg" role="tablist" aria-label="视图">
@@ -28,6 +29,20 @@
   <span id="mcp-status" class="status hide-sm"></span>
 </header>
 
+<div class="shell">
+<div id="drawer-back" class="drawer-back" hidden></div>
+<aside id="drawer" class="drawer" aria-label="作文列表" aria-hidden="true">
+  <div class="drawer-in">
+  <div class="drawer-top">
+    <span class="drawer-title">作文</span><span class="sp"></span>
+    <button id="btn-new" class="btn btn-primary btn-sm">新建</button>
+    <button id="drawer-close" class="btn btn-icon" aria-label="关闭列表"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </div>
+  <input id="list-q" class="input" type="search" placeholder="搜索标题、题目、正文" aria-label="搜索作文">
+  <div id="tag-filter" class="tag-filter"></div>
+  <div id="tree" class="tree"></div>
+  </div>
+</aside>
 <main id="main">
   <div id="empty" class="empty" hidden>
     <h2>EssayPilot</h2>
@@ -42,17 +57,16 @@
         <button id="info-toggle" class="info-toggle" aria-controls="info"></button>
         <span class="sp"></span>
         <button id="edit-toggle" class="btn btn-secondary btn-sm" hidden></button>
-        <span class="muted xsmall hide-sm">边注</span>
-        <div class="seg mini" id="density" role="group" aria-label="边注排列">
-          <button class="seg-btn" data-d="cluster">页边成簇</button>
-          <button class="seg-btn" data-d="below">落到段后</button>
+        <span class="muted xsmall">边注</span>
+        <div class="seg mini" role="group" aria-label="边注显示">
+          <button class="seg-btn" id="expand-all" aria-pressed="false" title="展开全部边注的完整内容">全部展开</button>
         </div>
       </div>
       <div id="info" class="info" hidden></div>
       <div class="desk" id="desk">
-        <div class="col-head l" id="head-l">我的批注</div>
+        <div class="col-head l" id="head-l">重点</div>
         <div class="col-head c"><input id="title" class="title-input" aria-label="标题" placeholder="未命名"><div class="wc" id="wc"></div></div>
-        <div class="col-head r" id="head-r">Agent</div>
+        <div class="col-head r" id="head-r">问题</div>
         <div class="margin l" id="mL"></div>
         <div class="center">
           <div class="editor-wrap essay-text" id="editor"></div>
@@ -65,7 +79,35 @@
   </section>
 
   <section id="versions" class="versions" hidden></section>
+
+  <section id="highlights" class="hl-page" hidden>
+    <div class="hl-sheet">
+      <div class="hl-head">
+        <h1 class="hl-title">重点句</h1>
+        <span id="hl-count" class="muted small"></span>
+      </div>
+      <div class="hl-tools">
+        <input id="hl-q" class="input" type="search" placeholder="搜索句子、边注、作文标题" aria-label="搜索重点句">
+        <label class="hl-group"><span class="muted xsmall">分组</span>
+          <select id="hl-group" class="input sel" aria-label="分组方式">
+            <option value="category">作文分类</option>
+            <option value="type">题型</option>
+            <option value="label">重点标签</option>
+            <option value="tag">主题标签</option>
+            <option value="essay">作文</option>
+          </select>
+        </label>
+        <div class="seg mini" id="hl-subj" role="group" aria-label="科目">
+          <button class="seg-btn" data-subj="">全部</button>
+          <button class="seg-btn" data-subj="english">英语</button>
+          <button class="seg-btn" data-subj="politics">政治</button>
+        </div>
+      </div>
+      <div id="hl-list" class="hl-list"></div>
+    </div>
+  </section>
 </main>
+</div>
 
 <footer class="dock" id="dock">
   <div class="dock-act">
@@ -84,16 +126,6 @@
   </div>
 </footer>
 
-<div id="drawer-back" class="drawer-back" hidden></div>
-<aside id="drawer" class="drawer" aria-label="作文列表" aria-hidden="true">
-  <div class="drawer-top">
-    <span class="drawer-title">作文</span><span class="sp"></span>
-    <button id="btn-new" class="btn btn-primary btn-sm">新建</button>
-    <button id="drawer-close" class="btn btn-icon" aria-label="关闭列表"><svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-  </div>
-  <input id="list-q" class="input" type="search" placeholder="搜索标题、题目、正文" aria-label="搜索作文">
-  <div id="tag-filter" class="tag-filter"></div>
-  <div id="tree" class="tree"></div>
-</aside>
+
 </body>
 </html>

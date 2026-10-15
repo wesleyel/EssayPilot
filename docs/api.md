@@ -34,7 +34,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 | `submit_evaluation` | essay_id, score, band, dimensions, overall_comment, strengths, weaknesses, polished, corrections? | 提交评分；服务端会校验各维度满分以及维度分之和，并自动生成版本快照 |
 | `delete_evaluation` | essay_id, evaluation_id | |
 
-标注类型 `kind` 有五种：`highlight` 重点、`good` 亮点、`issue` 问题、`question` 疑问、`correction` 纠错。其中 `correction` 必须带 `suggestion`。
+标注类型 `kind` 有五种：`highlight` 重点、`good` 亮点、`issue` 问题、`question` 疑问、`correction` 纠错。其中 `correction` 必须带 `suggestion`。边注 `note` 按 Markdown 渲染（粗体、斜体、删除线、行内代码、链接、列表、引用），不渲染原始 HTML。
 
 ### Resources
 
@@ -68,6 +68,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 | DELETE `/api/essays/{id}/evaluations/{eid}` | | |
 | PATCH / DELETE `/api/annotations/{aid}` | `AnnotationPatch` | `Annotation` |
 | POST `/api/annotations/{aid}/apply` | | `EssayDetail` |
+| GET `/api/highlights` | | `HighlightItem[]`：所有作文中仍挂在正文上的重点（顶层 `highlight`、状态 open），每条附作文标题、科目、题型、分类和主题标签 |
 | GET `/api/rubric/{type}` | | `{spec, text}` |
 | GET `/api/prompts/{name}?essay={id}` | | `{text}` |
 | GET / PUT `/api/ui-context` | `UIContext` | `UIContext` |

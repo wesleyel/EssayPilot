@@ -257,3 +257,27 @@ func TestAPIPing(t *testing.T) {
 		t.Fatalf("no ping in %q", rec.Body.String())
 	}
 }
+
+func TestAPIHighlights(t *testing.T) {
+	c, s := newAPIClient(t)
+	d := newEssay(t, s, "First point here. Second point there.")
+	if _, err := s.Annotate("agent:claude", d.Essay.ID, []core.AnnotateItem{
+		{Quote: "Second point", Kind: "highlight", Label: "要点", Note: "**关键**"},
+		{Quote: "First point", Kind: "highlight"},
+		{Quote: "here", Kind: "issue", Note: "不算重点"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var list []core.HighlightItem
+	c.do("GET", "/api/highlights", "", nil, 200, &list)
+	if len(list) != 2 {
+		t.Fatalf("got %d highlights, want 2: %+v", len(list), list)
+	}
+	if list[0].Quote != "First point" || list[1].Quote != "Second point" {
+		t.Fatalf("order: %q, %q", list[0].Quote, list[1].Quote)
+	}
+	h := list[1]
+	if h.EssayID != d.Essay.ID || h.EssayCategory != "图画·人生态度" || h.EssayType != "part-b" || len(h.EssayTags) != 1 || h.Label != "要点" {
+		t.Fatalf("bad item: %+v", h)
+	}
+}

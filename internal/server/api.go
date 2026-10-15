@@ -49,6 +49,7 @@ func newAPI(s *core.Service, opts APIOptions) http.Handler {
 	mux.HandleFunc("PATCH /api/annotations/{aid}", a.updateAnnotation)
 	mux.HandleFunc("DELETE /api/annotations/{aid}", a.deleteAnnotation)
 	mux.HandleFunc("POST /api/annotations/{aid}/apply", a.applySuggestion)
+	mux.HandleFunc("GET /api/highlights", a.highlights)
 	mux.HandleFunc("GET /api/rubric/{type}", a.rubric)
 	mux.HandleFunc("GET /api/prompts/{name}", a.prompt)
 	mux.HandleFunc("GET /api/ui-context", a.getUIContext)
@@ -169,6 +170,11 @@ func (a *api) createEssay(w http.ResponseWriter, r *http.Request) {
 		reply(w, http.StatusCreated, d, err)
 		return err
 	})
+}
+
+func (a *api) highlights(w http.ResponseWriter, r *http.Request) {
+	list, err := a.s.ListHighlights()
+	reply(w, http.StatusOK, list, err)
 }
 
 func (a *api) getEssay(w http.ResponseWriter, r *http.Request) {

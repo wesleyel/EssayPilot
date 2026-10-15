@@ -173,3 +173,63 @@ export async function copyText(text) {
     t.remove();
   }
 }
+
+// ---------------------------------------------------------------- Markdown（边注用的小子集）
+// 先转义再套格式，不放行任何原始 HTML。支持：**粗体**、*斜体*、~~删除~~、`代码`、[链接](https://…)、
+// 无序/有序列表、> 引用、# 标题（渲染为粗体行）、空行分段、单换行。
+
+function inlineFmt(s) {
+  return s
+    .replace(/\*\*(?=\S)([^*]*?\S)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*\w])\*(?=\S)([^*]*?\S)\*(?!\*)/g, '$1<i>$2</i>')
+    .replace(/~~(?=\S)(.*?\S)~~/g, '<s>$1</s>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
+// 行内 Markdown → HTML。换行原样保留（由调用方决定怎么处理）。
+export function mdInline(src) {
+  const parts = String(src ?? '').split(/(`[^`\n]+`)/);
+  return parts.map((p, i) => (i % 2 ? `<code>${esc(p.slice(1, -1))}</code>` : inlineFmt(esc(p)))).join('');
+}
+
+// 单行摘要：换行折成空格、去掉块级标记。
+export function mdLine(src) {
+  const s = String(src ?? '').split('\n').map((l) => l.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s?|#{1,6}\s+)/, '')).filter((l) => l.trim()).join(' ');
+  return mdInline(s);
+}
+
+export function md(src) {
+  const lines = String(src ?? '').replace(/\r\n?/g, '\n').split('\n');
+  let html = '';
+  let para = [];
+  let list = null; // { tag, items }
+  let quote = [];
+  const flushPara = () => { if (para.length) html += `<p>${para.map(mdInline).join('<br>')}</p>`; para = []; };
+  const flushList = () => { if (list) html += `<${list.tag}>${list.items.map((x) => `<li>${mdInline(x)}</li>`).join('')}</${list.tag}>`; list = null; };
+  const flushQuote = () => { if (quote.length) html += `<blockquote>${quote.map(mdInline).join('<br>')}</blockquote>`; quote = []; };
+  const flush = () => { flushPara(); flushList(); flushQuote(); };
+  for (const line of lines) {
+    let m;
+    if (!line.trim()) { flush(); continue; }
+    if ((m = line.match(/^\s*[-*+]\s+(.*)$/))) {
+      flushPara(); flushQuote();
+      if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; }
+      list.items.push(m[1]);
+    } else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      flushPara(); flushQuote();
+      if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; }
+      list.items.push(m[1]);
+    } else if ((m = line.match(/^\s*>\s?(.*)$/))) {
+      flushPara(); flushList();
+      quote.push(m[1]);
+    } else if ((m = line.match(/^\s*#{1,6}\s+(.*)$/))) {
+      flush();
+      html += `<p><b>${mdInline(m[1])}</b></p>`;
+    } else {
+      flushList(); flushQuote();
+      para.push(line);
+    }
+  }
+  flush();
+  return html;
+}

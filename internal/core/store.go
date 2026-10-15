@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -298,6 +299,15 @@ func listEvaluations(q querier, essayID string) ([]Evaluation, error) {
 // ---------- annotations ----------
 
 const annotationCols = `id, essay_id, evaluation_id, parent_id, start_pos, end_pos, quote, prefix, suffix, kind, label, note, suggestion, author, status, created_at, updated_at`
+
+// prefixCols 给逗号分隔的列名逐个加表别名前缀。
+func prefixCols(prefix, cols string) string {
+	parts := strings.Split(cols, ",")
+	for i, c := range parts {
+		parts[i] = prefix + strings.TrimSpace(c)
+	}
+	return strings.Join(parts, ", ")
+}
 
 func scanAnnotation(r scanner) (Annotation, error) {
 	var a Annotation
