@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/wesleyel/essay-eval/internal/core"
-	"github.com/wesleyel/essay-eval/internal/server"
-	"github.com/wesleyel/essay-eval/web"
+	"github.com/wesleyel/EssayPilot/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/server"
+	"github.com/wesleyel/EssayPilot/web"
 )
 
 func main() {

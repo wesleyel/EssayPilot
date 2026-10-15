@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/wesleyel/essay-eval/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/core"
 )
 
 // Options 是 HTTP 服务的开关。

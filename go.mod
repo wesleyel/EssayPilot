@@ -1,4 +1,4 @@
-module github.com/wesleyel/essay-eval
+module github.com/wesleyel/EssayPilot
 
 go 1.26.4
 

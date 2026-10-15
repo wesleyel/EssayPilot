@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wesleyel/essay-eval/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/core"
 )
 
 type APIOptions struct {

@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wesleyel/essay-eval/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/core"
 )
 
 const mcpInstructions = `EssayPilot 是考研作文（英语 Part A/B、政治主观题）批阅工作台。服务端不调用任何模型：评分、纠错、润色都由你（Agent）完成，再通过这些工具写回，用户会在网页界面上实时看到你的改动。

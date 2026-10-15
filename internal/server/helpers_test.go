@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/wesleyel/essay-eval/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/core"
 )
 
 func newTestService(t *testing.T) *core.Service {

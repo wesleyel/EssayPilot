@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/wesleyel/essay-eval/internal/core"
+	"github.com/wesleyel/EssayPilot/internal/core"
 )
 
 func newTestMCP(t *testing.T) (*core.Service, *mcp.ClientSession) {
