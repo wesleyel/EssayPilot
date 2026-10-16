@@ -181,8 +181,9 @@ var CorrectionLabels = map[string]string{
 
 // ---------- 标注 ----------
 
-// AnnotationKinds：重点 / 亮点 / 问题 / 疑问 / 纠错。纠错带替换建议，可一键采纳。
-var AnnotationKinds = []string{"highlight", "good", "issue", "question", "correction"}
+// AnnotationKinds：重点 / 亮点 / 问题 / 疑问 / 纠错 / 标记。纠错带替换建议，可一键采纳；
+// 标记（mark）是用户手动涂的荧光笔（给答案分点），没有边注。
+var AnnotationKinds = []string{"highlight", "good", "issue", "question", "correction", "mark"}
 
 var AnnotationKindLabels = map[string]string{
 	"highlight":  "重点",
@@ -190,6 +191,7 @@ var AnnotationKindLabels = map[string]string{
 	"issue":      "问题",
 	"question":   "疑问",
 	"correction": "纠错",
+	"mark":       "标记",
 }
 
 const (

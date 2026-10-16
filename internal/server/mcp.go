@@ -183,7 +183,7 @@ type restoreVersionIn struct {
 type annotateItemIn struct {
 	Quote      string  `json:"quote" jsonschema:"逐字摘自当前正文的片段（含标点），尽量短而唯一"`
 	Occurrence int     `json:"occurrence,omitempty" jsonschema:"quote 在正文中多次出现时指定第几处，从 1 开始，默认 1"`
-	Kind       string  `json:"kind" jsonschema:"highlight 重点 / good 亮点 / issue 问题 / question 疑问 / correction 纠错"`
+	Kind       string  `json:"kind" jsonschema:"highlight 重点 / good 亮点 / issue 问题 / question 疑问 / correction 纠错 / mark 标记（用户手动分点的荧光笔，无边注）"`
 	Label      string  `json:"label,omitempty" jsonschema:"细分类：纠错类别（英语 spelling/grammar/collocation/polish，政治 concept/analysis/discourse/structure/grammar）；重点写使用场景（2–6 字），如“开头表明来意”“转另一个话题”“结尾祝愿”"`
 	Note       string  `json:"note,omitempty" jsonschema:"边注，一句话点明作用或错在哪，不解释字面意思、不复述原文；重点留空（场景写在 label）；可写简单 markdown"`
 	Suggestion *string `json:"suggestion,omitempty" jsonschema:"替换文本；kind 为 correction 时必填，用户可一键采纳"`
@@ -208,7 +208,7 @@ type replyIn struct {
 type listAnnotationsIn struct {
 	EssayID string `json:"essay_id" jsonschema:"作文 id"`
 	Author  string `json:"author,omitempty" jsonschema:"user（用户自己的标记）/ agent（所有 Agent）/ 完整作者名"`
-	Kind    string `json:"kind,omitempty" jsonschema:"highlight / good / issue / question / correction"`
+	Kind    string `json:"kind,omitempty" jsonschema:"highlight / good / issue / question / correction / mark"`
 	Status  string `json:"status,omitempty" jsonschema:"open / resolved / orphaned"`
 }
 

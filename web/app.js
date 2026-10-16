@@ -36,6 +36,7 @@ const S = {
   pending: null,
   lastSel: null,
   promptOpen: false,
+  pen: false, // 荧光笔模式：在正文和题目上划选即上色，再划一次擦掉
   scoreOpen: false,
   activity: [],
   ui: null,
@@ -52,7 +53,9 @@ const isBelow = () => narrowMQ.matches;
 
 function derive() {
   const text = editor.value;
-  const vis = S.anns.filter((a) => a.status === 'open' && !a.parentId && a.start < a.end && a.end <= text.length);
+  const live = S.anns.filter((a) => a.status === 'open' && !a.parentId && a.start < a.end && a.end <= text.length);
+  const marks = live.filter(isMark); // 手动荧光笔：只上色，不进页边、不编号
+  const vis = live.filter((a) => !isMark(a));
   vis.sort((a, b) => a.start - b.start || a.end - b.end || (a.createdAt < b.createdAt ? -1 : 1));
   const numbers = new Map(vis.map((a, i) => [a.id, i + 1]));
   const replies = new Map();
@@ -63,8 +66,11 @@ function derive() {
   }
   for (const l of replies.values()) l.sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
   const orphans = S.anns.filter((a) => a.status === 'orphaned' && !a.parentId);
-  return { text, vis, numbers, replies, orphans };
+  return { text, vis, marks, numbers, replies, orphans };
 }
+
+function isMark(a) { return a.kind === 'mark'; }
+function markIdSet() { return new Set(S.anns.filter(isMark).map((a) => a.id)); }
 
 function openId() {
   return S.pinnedId || S.hotId || S.caretId;
@@ -131,6 +137,7 @@ function applyDetail(d) {
     if (S.pendingPin && d.annotations.some((a) => a.id === S.pendingPin)) S.pinnedId = S.pendingPin;
     S.expanded.clear();
     S.promptOpen = false;
+    renderList(); // 点击时 S.id 还没换，加载完再刷新一次侧栏的当前项
   } else {
     const local = editor.value;
     if (local === d.essay.content || local === S.serverContent) {
@@ -183,6 +190,7 @@ function closeEssay() {
   setEditorValue('');
   S.serverContent = '';
   if (location.hash && S.view !== 'highlights') history.replaceState(null, '', location.pathname + location.search);
+  renderList();
   renderAll();
   window.dispatchEvent(new CustomEvent('essaypilot:change', { detail: { id: null } }));
 }
@@ -204,7 +212,7 @@ function onSelection(sel) {
   let best = null;
   if (document.activeElement === editor.ta) {
     for (const a of S.anns) {
-      if (a.status !== 'open' || a.parentId || a.start >= a.end) continue;
+      if (a.status !== 'open' || a.parentId || a.start >= a.end || isMark(a)) continue;
       if (sel.start >= a.start && sel.start <= a.end && (!best || a.end - a.start < best.end - best.start)) best = a;
     }
   }
@@ -524,7 +532,7 @@ function renderInfo() {
   const prompt = e.prompt.trim();
   box.innerHTML = `<div class="pinfo-meta"><span>${esc(SUBJECT_LABEL[e.subject])} · ${esc(spec ? spec.label : e.type)}${e.category ? ' · ' + esc(e.category) : ''}</span>
       ${e.tags.map((t) => `<span class="tagref">#${esc(t)}</span>`).join(' ')}<span class="sp"></span><span class="pinfo-edit">${icon('pen', 13)} 编辑</span></div>
-    <div class="pinfo-text${prompt ? '' : ' empty'}${S.promptOpen ? ' open' : ''}">${prompt ? esc(prompt) : '还没有题目要求，点击添加'}</div>
+    <div class="pinfo-text${prompt ? '' : ' empty'}${S.promptOpen ? ' open' : ''}">${prompt ? promptHTML(e.prompt) : '还没有题目要求，点击添加'}</div>
     <button class="lnk pinfo-more" hidden></button>
     ${e.promptImage ? `<img class="plate pinfo-img" src="${esc(e.promptImage)}" alt="题目图片">` : ''}`;
   const text = box.querySelector('.pinfo-text');
@@ -535,6 +543,96 @@ function renderInfo() {
     more.textContent = S.promptOpen ? '收起 ▴' : '展开全文 ▾';
     text.classList.toggle('clipped', clipped && !S.promptOpen);
   }
+}
+
+// ---------------------------------------------------------------- 荧光笔（手动分点）
+// 正文上的标记存成 kind=mark 的标注；题目上的标记直接写进题目文本，用 ==…== 包住。
+
+const PROMPT_MARK_RE = /==([\s\S]+?)==/g;
+
+// 题目里 ==…== 的位置：[a,b) 含定界符，[s,e) 是被标记的文字。
+function promptMarks(p) {
+  return [...p.matchAll(PROMPT_MARK_RE)].map((m) => ({ a: m.index, b: m.index + m[0].length, s: m.index + 2, e: m.index + m[0].length - 2 }));
+}
+
+// 每段文字包 data-o（原始题目文本里的偏移），划选时换算回去。
+function promptHTML(raw) {
+  const from = raw.length - raw.trimStart().length, to = raw.trimEnd().length;
+  const span = (x, y) => (x < y ? `<span data-o="${x}">${esc(raw.slice(x, y))}</span>` : '');
+  let html = '', pos = from;
+  for (const m of promptMarks(raw)) {
+    if (m.b <= from || m.a >= to) continue;
+    html += span(pos, m.a) + `<mark class="m k-mark" data-pm="${m.a}">${span(m.s, m.e)}</mark>`;
+    pos = m.b;
+  }
+  return html + span(pos, to);
+}
+
+function promptOffset(node, off) {
+  const el = (node.nodeType === 3 ? node.parentElement : node)?.closest('[data-o]');
+  if (!el) return null;
+  return Number(el.dataset.o) + (node.nodeType === 3 ? off : 0);
+}
+
+async function penPrompt(ev) {
+  const raw = S.detail.essay.prompt;
+  const marks = promptMarks(raw);
+  const sel = window.getSelection();
+  let s, e;
+  if (sel && !sel.isCollapsed && sel.rangeCount) {
+    const r = sel.getRangeAt(0);
+    s = promptOffset(r.startContainer, r.startOffset);
+    e = promptOffset(r.endContainer, r.endOffset);
+    sel.removeAllRanges();
+  } else {
+    const m = ev.target.closest('[data-pm]');
+    if (!m) return;
+    s = e = Number(m.dataset.pm) + 2;
+  }
+  if (s == null || e == null) return;
+  const hit = marks.filter((m) => (s === e ? s >= m.s && s <= m.e : s < m.b && e > m.a));
+  let next;
+  if (hit.length) {
+    next = raw;
+    for (const m of hit.reverse()) next = next.slice(0, m.a) + next.slice(m.s, m.e) + next.slice(m.b);
+  } else {
+    while (s < e && /\s/.test(raw[s])) s++;
+    while (e > s && /\s/.test(raw[e - 1])) e--;
+    if (s >= e) return;
+    next = raw.slice(0, s) + '==' + raw.slice(s, e) + '==' + raw.slice(e);
+  }
+  try { applyDetail(await API.patch(`/essays/${S.id}`, { prompt: next })); } catch (err) { errToast(err); }
+}
+
+async function penContent(sel) {
+  if (!S.detail) return;
+  const marks = S.anns.filter((a) => isMark(a) && a.status === 'open' && !a.parentId);
+  const hit = marks.filter((a) => (sel.start === sel.end ? sel.start > a.start && sel.start < a.end : sel.start < a.end && sel.end > a.start));
+  try {
+    if (hit.length) {
+      await Promise.all(hit.map((a) => API.del(`/annotations/${a.id}`)));
+    } else {
+      const text = editor.value;
+      let { start, end } = sel;
+      while (start < end && /\s/.test(text[start])) start++;
+      while (end > start && /\s/.test(text[end - 1])) end--;
+      if (start >= end) return;
+      if (isDirty()) await saveContent();
+      const res = await API.post(`/essays/${S.id}/annotations`, { items: [{ start, end, kind: 'mark' }] });
+      if (res && res[0] && res[0].error) { toast(res[0].error, 'err'); return; }
+    }
+    await reloadCurrent();
+  } catch (e) { errToast(e); }
+}
+
+function setPen(on) {
+  S.pen = on;
+  if (on) S.promptOpen = true;
+  document.body.classList.toggle('pen', on);
+  const b = $('#pen-toggle');
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', on);
+  if (S.detail) renderInfo();
 }
 
 function editInfoDialog() {
@@ -623,7 +721,7 @@ function renderMarks() {
   et.hidden = !below;
   et.innerHTML = S.editing ? `${icon('check', 14)} 完成编辑` : `${icon('pen', 14)} 编辑正文`;
 
-  editor.render({ anns: D.vis, numbers: showEditor && !below ? D.numbers : new Map(), pending: S.pending, hotId: S.hotId });
+  editor.render({ anns: D.vis.concat(D.marks), numbers: showEditor && !below ? D.numbers : new Map(), pending: S.pending, hotId: S.hotId });
   S._D = D;
   if (!below) layoutMargins();
   else {
@@ -631,7 +729,7 @@ function renderMarks() {
     $('#mR').innerHTML = '';
     if (!showEditor) {
       const groups = groupByPara(D, paragraphsOf(D.text), null);
-      renderReading($('#reading'), D.text, D.vis, D.numbers, (p) => belowNotesHTML(groups.get(p.i), ctxFor(D)), S.pending);
+      renderReading($('#reading'), D.text, D.vis.concat(D.marks), D.numbers, (p) => belowNotesHTML(groups.get(p.i), ctxFor(D)), S.pending);
     }
   }
   renderOrphans(D);
@@ -1001,8 +1099,9 @@ function bind() {
   editor = new Editor($('#editor'), {
     onInput,
     onSelection,
-    onHover: (id) => setHot(id, 'text'),
+    onHover: (id) => setHot(id && markIdSet().has(id) ? null : id, 'text'),
     onRequestAnnotate: (sel) => {
+      if (S.pen) { penContent(sel); return; }
       requestAnnotate(sel, () => editor.rangeRect(sel.start, sel.end));
     },
     onKeyDown: (e) => {
@@ -1014,18 +1113,24 @@ function bind() {
 
   // 阅读视图（落到段后）
   const reading = $('#reading');
-  reading.addEventListener('mouseup', () => {
+  reading.addEventListener('mouseup', (e) => {
     setTimeout(() => {
       const s = readingSelection(reading);
-      if (!s) return;
+      if (!s) {
+        const m = S.pen && e.target.closest('mark.k-mark');
+        if (m) API.del(`/annotations/${m.dataset.id}`).then(reloadCurrent).catch(errToast);
+        return;
+      }
       S.lastSel = { start: s.start, end: s.end };
+      if (S.pen) { penContent(s); window.getSelection().removeAllRanges(); return; }
       const rect = s.rect;
       requestAnnotate({ start: s.start, end: s.end }, () => rect);
     }, 0);
   });
   reading.addEventListener('mouseover', (e) => {
     const m = e.target.closest('[data-id]');
-    setHot(m ? m.dataset.id : null, 'reading');
+    const id = m ? m.dataset.id : null;
+    setHot(id && markIdSet().has(id) ? null : id, 'reading');
   });
   reading.addEventListener('mouseleave', () => setHot(null));
 
@@ -1116,8 +1221,16 @@ function bind() {
     openDrawer(!narrowMQ.matches && store.get('drawer', 'closed') === 'open', { focus: false });
     if (S.detail) renderMarks();
   });
+  $('#pen-toggle').addEventListener('click', () => setPen(!S.pen));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.pen && !document.querySelector('.dialog-backdrop')) setPen(false); });
+  $('#info').addEventListener('mouseup', (e) => { if (S.pen && S.detail && e.target.closest('.pinfo-text')) penPrompt(e); });
+  editor.ta.addEventListener('mouseup', () => {
+    const s = editor.selection();
+    if (S.pen && s.start === s.end) penContent(s);
+  });
   $('#info').addEventListener('click', (e) => {
     if (e.target.closest('.pinfo-more')) { S.promptOpen = !S.promptOpen; renderInfo(); return; }
+    if (S.pen) return;
     if (window.getSelection()?.toString()) return; // 允许选中复制题目
     editInfoDialog();
   });
