@@ -183,8 +183,8 @@ func TestMCPFlow(t *testing.T) {
 		t.Errorf("get_ui_context = %+v", ui)
 	}
 
-	// prompts
-	pr, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "grade_essay", Arguments: map[string]string{"essay_id": id}})
+	// prompts（传参 & 省略 essay_id 回退 UIContext）
+	pr, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "grade_essay"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +200,10 @@ func TestMCPFlow(t *testing.T) {
 	}
 	if text := pr.Messages[0].Content.(*mcp.TextContent).Text; !strings.Contains(text, "这个开头会不会太俗") || !strings.Contains(text, "reply") {
 		t.Errorf("review_my_marks prompt = %s", text)
+	}
+	s.SetUIContext(core.UIContext{})
+	if _, err := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "grade_essay"}); err == nil {
+		t.Error("prompt without essay_id and ui_context should fail")
 	}
 
 	// resources

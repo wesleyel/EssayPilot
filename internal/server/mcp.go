@@ -70,7 +70,7 @@ func addTool[In, Out any](srv *mcp.Server, s *core.Service, t *mcp.Tool, fn func
 		if err != nil {
 			s.Log(c.actor, t.Name, c.essayID, "失败："+err.Error())
 			var zero Out
-			return nil, zero, toolError(err)
+			return nil, zero, err
 		}
 		if c.summary == "" {
 			c.summary = "完成"
@@ -78,13 +78,6 @@ func addTool[In, Out any](srv *mcp.Server, s *core.Service, t *mcp.Tool, fn func
 		s.Log(c.actor, t.Name, c.essayID, c.summary)
 		return nil, out, nil
 	})
-}
-
-func toolError(err error) error {
-	if errors.Is(err, core.ErrNotFound) {
-		return fmt.Errorf("未找到：%v", err)
-	}
-	return err
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -659,12 +652,18 @@ func newMCPServer(s *core.Service) *mcp.Server {
 
 	for _, name := range core.PromptNames {
 		srv.AddPrompt(&mcp.Prompt{Name: name, Description: core.PromptDescriptions[name],
-			Arguments: []*mcp.PromptArgument{{Name: "essay_id", Description: "作文 id", Required: true}}},
+			Arguments: []*mcp.PromptArgument{{Name: "essay_id", Description: "作文 id（省略则取界面当前打开的作文）"}}},
 			func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-				id := req.Params.Arguments["essay_id"]
+				id := strings.TrimSpace(req.Params.Arguments["essay_id"])
+				if id == "" {
+					id = s.UIContext().EssayID
+				}
+				if id == "" {
+					return nil, errors.New("未指定 essay_id，且界面当前没有打开作文")
+				}
 				d, err := s.GetEssay(id)
 				if err != nil {
-					return nil, toolError(err)
+					return nil, err
 				}
 				text, err := core.PromptText(name, d)
 				if err != nil {
