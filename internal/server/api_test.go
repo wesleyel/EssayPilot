@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/wesleyel/EssayPilot/internal/core"
+	"github.com/wesleyel/EssayPilot/web"
 )
 
 type apiClient struct {
@@ -279,5 +280,21 @@ func TestAPIHighlights(t *testing.T) {
 	h := list[1]
 	if h.EssayID != d.Essay.ID || h.EssayCategory != "图画·人生态度" || h.EssayType != "part-b" || len(h.EssayTags) != 1 || h.Label != "要点" {
 		t.Fatalf("bad item: %+v", h)
+	}
+}
+
+func TestPWAFiles(t *testing.T) {
+	h := New(newTestService(t), Options{Web: web.FS})
+	for path, kind := range map[string]string{
+		"/manifest.webmanifest": "application/manifest+json",
+		"/sw.js":                "text/javascript; charset=utf-8",
+		"/icon-192.png":         "image/png",
+		"/icon-512.png":         "image/png",
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != kind {
+			t.Errorf("%s: %d %q", path, rec.Code, rec.Header().Get("Content-Type"))
+		}
 	}
 }

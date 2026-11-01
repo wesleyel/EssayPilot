@@ -1309,4 +1309,8 @@ async function init() {
   import('./webmcp.js').then((m) => m.init(window.essayPilot)).catch((e) => console.warn('WebMCP 初始化失败', e));
 }
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('service worker 注册失败', e));
+}
+
 init();

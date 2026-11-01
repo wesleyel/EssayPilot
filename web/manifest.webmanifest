@@ -1,0 +1,17 @@
+{
+  "name": "EssayPilot",
+  "short_name": "EssayPilot",
+  "description": "考研作文批阅工作台",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "lang": "zh-CN",
+  "background_color": "#fffff8",
+  "theme_color": "#b68235",
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

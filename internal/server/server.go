@@ -52,6 +52,9 @@ func staticHandler(sub fs.FS, trial string) http.Handler {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		files.ServeHTTP(w, r)
 	})
 }
