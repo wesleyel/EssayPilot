@@ -290,7 +290,8 @@ main { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative;
 
 .desk {
   display: grid; justify-content: center; column-gap: 32px;
-  grid-template-columns: minmax(150px, 220px) minmax(0, 38em) minmax(170px, 260px);
+  /* 正文栏至少 520px，页边先收窄；再放不下就切到段后边注（阈值见 app.js 的 BELOW_MAX） */
+  grid-template-columns: minmax(130px, 220px) minmax(min(520px, 100%), 38em) minmax(150px, 260px);
 }
 .col-head { font-family: var(--font-heading); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; align-self: end; padding-bottom: 14px; }
 .col-head.l { text-align: right; color: var(--color-accent-700); }
@@ -551,7 +552,7 @@ body.no-essay .prompt-btns .btn { opacity: .45; pointer-events: none; }
 /* ---------------------------------------------------------------- 响应式 */
 
 @media (max-width: 1180px) {
-  .desk { column-gap: 22px; grid-template-columns: minmax(130px, 180px) minmax(0, 36em) minmax(150px, 210px); }
+  .desk { column-gap: 22px; grid-template-columns: minmax(130px, 180px) minmax(min(520px, 100%), 36em) minmax(150px, 210px); }
   .sheet { padding-inline: 18px; }
   .vgrid { grid-template-columns: 190px minmax(0, 1fr) 300px; }
   .dims { grid-template-columns: repeat(4, 80px); }

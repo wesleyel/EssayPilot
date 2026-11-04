@@ -46,8 +46,11 @@ const S = {
 };
 
 const narrowMQ = window.matchMedia('(max-width: 899px)');
-// 窄屏放不下页边：边注落到段后。
-const isBelow = () => narrowMQ.matches;
+// 主区放不下两侧页边（窄屏，或宽屏但抽屉占去了位置）：边注落到段后。
+// 按主区实际宽度判断，而不是视口宽度；阈值 = 两侧页边最小宽 + 栏间距 + 正文最小 520px + 页面内边距（见 app.css .desk）。
+const BELOW_MAX = 940;
+let below = narrowMQ.matches;
+const isBelow = () => below;
 
 // ---------------------------------------------------------------- 派生数据
 
@@ -1215,6 +1218,16 @@ function bind() {
     renderMarks();
     if (S.editing) editor.ta.focus();
   });
+  // 主区宽度跨过阈值（窗口缩放、抽屉开合）：切换页边 / 段后边注。
+  new ResizeObserver(() => {
+    const w = $('#main').clientWidth;
+    if (!w) return;
+    const b = w < BELOW_MAX;
+    if (b === below) return;
+    below = b;
+    S.editing = false;
+    if (S.detail && S.view === 'review') renderMarks();
+  }).observe($('#main'));
   narrowMQ.addEventListener('change', () => {
     S.editing = false;
     // 跨过断点：宽屏恢复记住的抽屉状态，窄屏收起覆盖层。
