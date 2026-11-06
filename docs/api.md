@@ -19,10 +19,10 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 | --- | --- | --- |
 | `get_ui_context` | | 用户在界面里当前打开的作文，以及选中的文字 |
 | `list_types` | | 题型、分类、各科目评分维度、纠错类别、标注类型 |
-| `list_essays` | subject?, type?, tag?, query? | 列出作文（不含正文） |
+| `list_essays` | subject?, type?, tag?, query?, starred? | 列出作文（不含正文） |
 | `get_essay` | id | 题目、正文、全部标注、评分记录、版本，以及按段编号的正文 `numbered` |
 | `create_essay` | subject, type, title?, category?, tags, prompt?, content? | 新建作文，至少要有一个主题标签 |
-| `update_essay` | id, type?, title?, category?, tags?, prompt?, content? | 只传要改的字段 |
+| `update_essay` | id, type?, title?, category?, tags?, prompt?, content?, starred? | 只传要改的字段；只改 starred 不刷新 updatedAt |
 | `delete_essay` | id | 永久删除 |
 | `save_version` / `list_versions` / `restore_version` | essay_id, … | 版本快照 |
 | `annotate` | essay_id, items[{quote, occurrence?, kind, label?, note?, suggestion?}] | 批量标注；没找到原文的条目会单独报错，不影响其他条目 |
@@ -57,7 +57,7 @@ JSON 形状见 [`internal/core/types.go`](../internal/core/types.go)，枚举（
 | 方法 路径 | 请求 | 响应 |
 | --- | --- | --- |
 | GET `/api/meta` | | 题型、维度、纠错类别、标注类型、MCP 是否开启 |
-| GET `/api/essays?subject=&type=&tag=&q=` | | `EssaySummary[]` |
+| GET `/api/essays?subject=&type=&tag=&q=&starred=1` | | `EssaySummary[]` |
 | POST `/api/essays` | `CreateEssayInput` | `EssayDetail` |
 | GET / PATCH / DELETE `/api/essays/{id}` | `UpdateEssayInput` | `EssayDetail` |
 | POST `/api/essays/{id}/versions` | `{note?}` | `Version` |

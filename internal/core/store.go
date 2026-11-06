@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS essays (
 	prompt_image TEXT NOT NULL DEFAULT '',
 	content      TEXT NOT NULL DEFAULT '',
 	word_count   INTEGER NOT NULL DEFAULT 0,
+	starred      INTEGER NOT NULL DEFAULT 0,
 	created_at   TEXT NOT NULL,
 	updated_at   TEXT NOT NULL
 );
@@ -100,7 +101,25 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return db, nil
+}
+
+// migrate 给旧库补上后来新增的列。
+func migrate(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('essays') WHERE name = 'starred'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE essays ADD COLUMN starred INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // querier 同时由 *sql.DB 与 *sql.Tx 实现。
@@ -149,13 +168,13 @@ func strPtr(ns sql.NullString) *string {
 
 // ---------- essays ----------
 
-const essayCols = `id, subject, type, title, category, tags, prompt, prompt_image, content, word_count, created_at, updated_at`
+const essayCols = `id, subject, type, title, category, tags, prompt, prompt_image, content, word_count, starred, created_at, updated_at`
 
 func scanEssay(r scanner) (Essay, error) {
 	var e Essay
 	var tags string
 	err := r.Scan(&e.ID, &e.Subject, &e.Type, &e.Title, &e.Category, &tags, &e.Prompt, &e.PromptImage,
-		&e.Content, &e.WordCount, &e.CreatedAt, &e.UpdatedAt)
+		&e.Content, &e.WordCount, &e.Starred, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {
 		return e, err
 	}
@@ -172,16 +191,16 @@ func getEssay(q querier, id string) (Essay, error) {
 }
 
 func insertEssay(q querier, e Essay) error {
-	_, err := q.Exec(`INSERT INTO essays (`+essayCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := q.Exec(`INSERT INTO essays (`+essayCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ID, e.Subject, e.Type, e.Title, e.Category, toJSON(e.Tags), e.Prompt, e.PromptImage,
-		e.Content, e.WordCount, e.CreatedAt, e.UpdatedAt)
+		e.Content, e.WordCount, e.Starred, e.CreatedAt, e.UpdatedAt)
 	return err
 }
 
 func saveEssay(q querier, e Essay) error {
 	_, err := q.Exec(`UPDATE essays SET type=?, title=?, category=?, tags=?, prompt=?, prompt_image=?, content=?,
-		word_count=?, updated_at=? WHERE id=?`,
-		e.Type, e.Title, e.Category, toJSON(e.Tags), e.Prompt, e.PromptImage, e.Content, e.WordCount, e.UpdatedAt, e.ID)
+		word_count=?, starred=?, updated_at=? WHERE id=?`,
+		e.Type, e.Title, e.Category, toJSON(e.Tags), e.Prompt, e.PromptImage, e.Content, e.WordCount, e.Starred, e.UpdatedAt, e.ID)
 	return err
 }
 

@@ -95,6 +95,7 @@ type listEssaysIn struct {
 	Type    string `json:"type,omitempty" jsonschema:"题型 id，如 part-a、part-b、mayuan（见 list_types）"`
 	Tag     string `json:"tag,omitempty" jsonschema:"主题标签"`
 	Query   string `json:"query,omitempty" jsonschema:"在标题、题目、正文中搜索的子串"`
+	Starred bool   `json:"starred,omitempty" jsonschema:"为 true 时只列用户收藏的作文"`
 }
 
 type listEssaysOut struct {
@@ -153,6 +154,7 @@ type updateEssayIn struct {
 	Tags     *[]string `json:"tags,omitempty" jsonschema:"新的主题标签（整体替换，不能为空）"`
 	Prompt   *string   `json:"prompt,omitempty" jsonschema:"新的题目要求"`
 	Content  *string   `json:"content,omitempty" jsonschema:"新的正文（整体替换；已有标注会自动重新锚定，找不到原文的变为 orphaned）"`
+	Starred  *bool     `json:"starred,omitempty" jsonschema:"收藏（true）或取消收藏（false）"`
 }
 
 type okOut struct {
@@ -306,9 +308,9 @@ func newMCPServer(s *core.Service) *mcp.Server {
 		&mcp.ServerOptions{Instructions: mcpInstructions})
 
 	addTool(srv, s, &mcp.Tool{Name: "list_essays", Annotations: readOnly,
-		Description: "列出作文（不含正文），可按科目、题型、标签筛选或搜索。用户提到某篇但没给 id 时先用它查找。"},
+		Description: "列出作文（不含正文），可按科目、题型、标签、是否收藏筛选或搜索。用户提到某篇但没给 id 时先用它查找。"},
 		func(c *mcpCall, in listEssaysIn) (listEssaysOut, error) {
-			list, err := s.ListEssays(core.EssayFilter{Subject: in.Subject, Type: in.Type, Tag: in.Tag, Query: in.Query})
+			list, err := s.ListEssays(core.EssayFilter{Subject: in.Subject, Type: in.Type, Tag: in.Tag, Query: in.Query, Starred: in.Starred})
 			if err != nil {
 				return listEssaysOut{}, err
 			}
@@ -340,16 +342,16 @@ func newMCPServer(s *core.Service) *mcp.Server {
 		})
 
 	addTool(srv, s, &mcp.Tool{Name: "update_essay", Annotations: writeTool,
-		Description: "修改作文的标题、题型、分类、标签、题目或正文，只传要改的字段。改正文前建议先 save_version；只想提修改建议时用 annotate 的 correction，不要直接改正文。"},
+		Description: "修改作文的标题、题型、分类、标签、题目、正文或收藏状态，只传要改的字段。改正文前建议先 save_version；只想提修改建议时用 annotate 的 correction，不要直接改正文。"},
 		func(c *mcpCall, in updateEssayIn) (essayView, error) {
 			d, err := s.UpdateEssay(c.actor, in.ID, core.UpdateEssayInput{Type: in.Type, Title: in.Title, Category: in.Category,
-				Tags: in.Tags, Prompt: in.Prompt, Content: in.Content})
+				Tags: in.Tags, Prompt: in.Prompt, Content: in.Content, Starred: in.Starred})
 			if err != nil {
 				return essayView{}, err
 			}
 			fields := []string{}
 			for name, set := range map[string]bool{"题型": in.Type != nil, "标题": in.Title != nil, "分类": in.Category != nil,
-				"标签": in.Tags != nil, "题目": in.Prompt != nil, "正文": in.Content != nil} {
+				"标签": in.Tags != nil, "题目": in.Prompt != nil, "正文": in.Content != nil, "收藏": in.Starred != nil} {
 				if set {
 					fields = append(fields, name)
 				}

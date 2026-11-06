@@ -19,6 +19,7 @@ const S = {
   list: [],
   listQ: '',
   listTag: '',
+  listStar: store.get('listStar', '0') === '1', // 只看收藏
   collapsed: new Set(),
   id: null,
   detail: null,
@@ -843,8 +844,11 @@ async function loadList() {
 function renderList() {
   const tags = new Map();
   for (const e of S.list) for (const t of e.tags || []) tags.set(t, (tags.get(t) || 0) + 1);
-  $('#tag-filter').innerHTML = [...tags.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `<button class="tag ${S.listTag === t ? 'tag-accent' : 'tag-outline'}" data-tag="${esc(t)}">#${esc(t)} <span class="n">${n}</span></button>`).join('');
-  const items = S.listTag ? S.list.filter((e) => (e.tags || []).includes(S.listTag)) : S.list;
+  const nStar = S.list.filter((e) => e.starred).length;
+  const starChip = nStar || S.listStar
+    ? `<button class="tag star-chip ${S.listStar ? 'tag-accent' : 'tag-outline'}" data-star-filter aria-pressed="${S.listStar}">${icon('star', 11)}收藏 <span class="n">${nStar}</span></button>` : '';
+  $('#tag-filter').innerHTML = starChip + [...tags.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `<button class="tag ${S.listTag === t ? 'tag-accent' : 'tag-outline'}" data-tag="${esc(t)}">#${esc(t)} <span class="n">${n}</span></button>`).join('');
+  const items = S.list.filter((e) => (!S.listTag || (e.tags || []).includes(S.listTag)) && (!S.listStar || e.starred));
   let html = '';
   for (const subj of ['english', 'politics']) {
     const sItems = items.filter((e) => e.subject === subj);
@@ -864,6 +868,7 @@ function renderList() {
           html += '<div class="tree-in">' + tItems.map((e) => `<div class="tree-e${e.id === S.id ? ' cur' : ''}" data-open="${esc(e.id)}" role="button" tabindex="0">
             <span class="nm" title="${esc(e.title)}">${esc(e.title || '未命名')}</span>
             <span class="sc">${e.latestScore ? fmtScore(e.latestScore.score) : '—'}</span>
+            <button class="star${e.starred ? ' on' : ''}" data-star="${esc(e.id)}" aria-pressed="${!!e.starred}" aria-label="${e.starred ? '取消收藏' : '收藏'} ${esc(e.title)}" title="${e.starred ? '取消收藏' : '收藏'}">${icon('star', 13)}</button>
             <button class="del" data-del="${esc(e.id)}" aria-label="删除 ${esc(e.title)}">${icon('trash', 13)}</button></div>`).join('') + '</div>';
         }
       }
@@ -871,7 +876,23 @@ function renderList() {
     }
     html += '</div>';
   }
-  $('#tree').innerHTML = html || `<div class="muted small pad">${S.listQ || S.listTag ? '没有匹配的作文' : '还没有作文，点“新建”开始。'}</div>`;
+  $('#tree').innerHTML = html || `<div class="muted small pad">${S.listStar && !S.listQ && !S.listTag ? '还没有收藏的作文，点作文右侧的星标收藏。' : S.listQ || S.listTag || S.listStar ? '没有匹配的作文' : '还没有作文，点“新建”开始。'}</div>`;
+}
+
+// 收藏：先改本地再请求，失败回滚。只改 starred 不会刷新 updatedAt，列表顺序不变。
+async function toggleStar(id) {
+  const e = S.list.find((x) => x.id === id);
+  if (!e) return;
+  const want = !e.starred;
+  e.starred = want;
+  renderList();
+  try {
+    await API.patch(`/essays/${encodeURIComponent(id)}`, { starred: want });
+  } catch (err) {
+    e.starred = !want;
+    renderList();
+    errToast(err);
+  }
 }
 
 // 宽屏：抽屉在主区左侧占位，打开时把内容推向右侧（记住开合状态）；窄屏：覆盖层 + 遮罩。
@@ -1167,6 +1188,7 @@ function bind() {
   $('#btn-new').addEventListener('click', newEssayDialog);
   $('#list-q').addEventListener('input', debounce((e) => { S.listQ = e.target.value.trim(); loadList(); }, 250));
   $('#tag-filter').addEventListener('click', (e) => {
+    if (e.target.closest('[data-star-filter]')) { S.listStar = !S.listStar; store.set('listStar', S.listStar ? '1' : '0'); renderList(); return; }
     const b = e.target.closest('[data-tag]');
     if (!b) return;
     S.listTag = S.listTag === b.dataset.tag ? '' : b.dataset.tag;
@@ -1175,6 +1197,8 @@ function bind() {
   $('#tree').addEventListener('click', (e) => {
     const del = e.target.closest('[data-del]');
     if (del) { e.stopPropagation(); deleteEssay(del.dataset.del); return; }
+    const star = e.target.closest('[data-star]');
+    if (star) { e.stopPropagation(); toggleStar(star.dataset.star); return; }
     const col = e.target.closest('[data-col]');
     if (col) { const k = col.dataset.col; if (S.collapsed.has(k)) S.collapsed.delete(k); else S.collapsed.add(k); renderList(); return; }
     const o = e.target.closest('[data-open]');

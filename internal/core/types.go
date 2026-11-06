@@ -16,6 +16,7 @@ type Essay struct {
 	PromptImage string   `json:"promptImage,omitempty"` // data URL，空串表示无图
 	Content     string   `json:"content"`
 	WordCount   int      `json:"wordCount"`
+	Starred     bool     `json:"starred"` // 收藏
 	CreatedAt   string   `json:"createdAt"`
 	UpdatedAt   string   `json:"updatedAt"`
 }
@@ -29,6 +30,7 @@ type EssaySummary struct {
 	Category        string        `json:"category"`
 	Tags            []string      `json:"tags"`
 	WordCount       int           `json:"wordCount"`
+	Starred         bool          `json:"starred"`
 	LatestScore     *ScoreSummary `json:"latestScore"`
 	AnnotationCount int           `json:"annotationCount"`
 	VersionCount    int           `json:"versionCount"`
@@ -143,7 +145,8 @@ type EssayFilter struct {
 	Subject string `json:"subject,omitempty"`
 	Type    string `json:"type,omitempty"`
 	Tag     string `json:"tag,omitempty"`
-	Query   string `json:"query,omitempty"` // 标题/题目/正文子串
+	Query   string `json:"query,omitempty"`   // 标题/题目/正文子串
+	Starred bool   `json:"starred,omitempty"` // 只列收藏
 }
 
 type CreateEssayInput struct {
@@ -158,6 +161,7 @@ type CreateEssayInput struct {
 }
 
 // UpdateEssayInput：nil 字段不改。PromptImage 传空串表示删除图片。Tags 整体替换且不能为空。
+// 只改 Starred（收藏）时不刷新 updatedAt，列表顺序不变。
 type UpdateEssayInput struct {
 	Type        *string   `json:"type,omitempty"`
 	Title       *string   `json:"title,omitempty"`
@@ -166,6 +170,7 @@ type UpdateEssayInput struct {
 	Prompt      *string   `json:"prompt,omitempty"`
 	PromptImage *string   `json:"promptImage,omitempty"`
 	Content     *string   `json:"content,omitempty"`
+	Starred     *bool     `json:"starred,omitempty"`
 }
 
 // AnnotateItem：给 Quote（Agent 常用，服务端定位）或 Start/End（界面选区）其一。

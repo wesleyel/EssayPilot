@@ -523,6 +523,12 @@ body.no-essay .prompt-btns .btn { opacity: .45; pointer-events: none; }
 .tree-e .del { opacity: 0; background: none; border: 0; padding: 2px; cursor: pointer; color: var(--color-neutral-600); border-radius: 2px; }
 .tree-e:hover .del, .tree-e:focus-within .del, .tree-e .del:focus-visible { opacity: 1; }
 .tree-e .del:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.tree-e .star { opacity: 0; display: inline-flex; background: none; border: 0; padding: 2px; cursor: pointer; color: var(--color-neutral-600); border-radius: 2px; }
+.tree-e:hover .star, .tree-e:focus-within .star, .tree-e .star:focus-visible, .tree-e .star.on { opacity: 1; }
+.tree-e .star:hover { color: var(--color-accent-700); background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.tree-e .star.on { color: var(--color-accent); }
+.tree-e .star.on .ico, .star-chip.tag-accent .ico { fill: currentColor; }
+@media (hover: none) { .tree-e .star { opacity: 1; } }
 
 /* ---------------------------------------------------------------- 重点句页 */
 

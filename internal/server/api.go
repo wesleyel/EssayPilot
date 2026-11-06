@@ -155,7 +155,8 @@ func (a *api) meta(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) listEssays(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := a.s.ListEssays(core.EssayFilter{Subject: q.Get("subject"), Type: q.Get("type"), Tag: q.Get("tag"), Query: q.Get("q")})
+	list, err := a.s.ListEssays(core.EssayFilter{Subject: q.Get("subject"), Type: q.Get("type"), Tag: q.Get("tag"), Query: q.Get("q"),
+		Starred: q.Get("starred") == "1" || q.Get("starred") == "true"})
 	reply(w, http.StatusOK, list, err)
 }
 

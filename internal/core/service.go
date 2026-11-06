@@ -73,15 +73,16 @@ func (s *Service) tx(fn func(tx *sql.Tx) error) error {
 // ---------- 题目 ----------
 
 func (s *Service) ListEssays(f EssayFilter) ([]EssaySummary, error) {
-	rows, err := s.db.Query(`SELECT e.id, e.subject, e.type, e.title, e.category, e.tags, e.word_count, e.updated_at,
+	rows, err := s.db.Query(`SELECT e.id, e.subject, e.type, e.title, e.category, e.tags, e.word_count, e.starred, e.updated_at,
 		(SELECT count(*) FROM annotations a WHERE a.essay_id = e.id AND a.parent_id IS NULL AND a.status != 'resolved'),
 		(SELECT count(*) FROM versions v WHERE v.essay_id = e.id)
 		FROM essays e
 		WHERE (?1 = '' OR e.subject = ?1) AND (?2 = '' OR e.type = ?2)
 		  AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(e.tags) WHERE value = ?3))
 		  AND (?4 = '' OR instr(lower(e.title || char(10) || e.prompt || char(10) || e.content), lower(?4)) > 0)
+		  AND (?5 = 0 OR e.starred = 1)
 		ORDER BY e.updated_at DESC, e.rowid DESC`,
-		f.Subject, f.Type, strings.TrimSpace(f.Tag), strings.TrimSpace(f.Query))
+		f.Subject, f.Type, strings.TrimSpace(f.Tag), strings.TrimSpace(f.Query), f.Starred)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +90,7 @@ func (s *Service) ListEssays(f EssayFilter) ([]EssaySummary, error) {
 	for rows.Next() {
 		var e EssaySummary
 		var tags string
-		if err := rows.Scan(&e.ID, &e.Subject, &e.Type, &e.Title, &e.Category, &tags, &e.WordCount, &e.UpdatedAt,
+		if err := rows.Scan(&e.ID, &e.Subject, &e.Type, &e.Title, &e.Category, &tags, &e.WordCount, &e.Starred, &e.UpdatedAt,
 			&e.AnnotationCount, &e.VersionCount); err != nil {
 			rows.Close()
 			return nil, err
@@ -224,7 +225,12 @@ func (s *Service) UpdateEssay(actor, id string, in UpdateEssayInput) (EssayDetai
 		e.Content = *in.Content
 		e.WordCount = countWords(e.Content, e.Subject)
 	}
-	e.UpdatedAt = now()
+	if in.Starred != nil {
+		e.Starred = *in.Starred
+	}
+	if in != (UpdateEssayInput{Starred: in.Starred}) {
+		e.UpdatedAt = now()
+	}
 	moved := false
 	err = s.tx(func(tx *sql.Tx) error {
 		if err := saveEssay(tx, e); err != nil {

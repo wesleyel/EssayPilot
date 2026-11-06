@@ -416,3 +416,52 @@ func TestActivityAndUIContext(t *testing.T) {
 		t.Fatalf("ui context: %+v", c)
 	}
 }
+
+func TestStarEssay(t *testing.T) {
+	s := newTestService(t)
+	a := newEssay(t, s, "apple pie")
+	time.Sleep(time.Millisecond)
+	b := newEssay(t, s, "banana")
+	d, err := s.UpdateEssay("user", a.Essay.ID, UpdateEssayInput{Starred: ptrTo(true)})
+	if err != nil || !d.Essay.Starred {
+		t.Fatalf("star: %v %+v", err, d.Essay)
+	}
+	if d.Essay.UpdatedAt != a.Essay.UpdatedAt {
+		t.Fatalf("starring should not touch updatedAt: %s -> %s", a.Essay.UpdatedAt, d.Essay.UpdatedAt)
+	}
+	list, _ := s.ListEssays(EssayFilter{})
+	if list[0].ID != b.Essay.ID || !list[1].Starred || list[0].Starred {
+		t.Fatalf("list after star: %+v", list)
+	}
+	if l, _ := s.ListEssays(EssayFilter{Starred: true}); len(l) != 1 || l[0].ID != a.Essay.ID {
+		t.Fatalf("starred filter: %+v", l)
+	}
+	d, _ = s.UpdateEssay("user", a.Essay.ID, UpdateEssayInput{Starred: ptrTo(true), Title: ptrTo("x")})
+	if d.Essay.UpdatedAt == a.Essay.UpdatedAt || !d.Essay.Starred {
+		t.Fatalf("mixed update should touch updatedAt and keep star: %+v", d.Essay)
+	}
+	if d, _ = s.UpdateEssay("user", a.Essay.ID, UpdateEssayInput{Starred: ptrTo(false)}); d.Essay.Starred {
+		t.Fatalf("unstar: %+v", d.Essay)
+	}
+}
+
+func TestMigrateAddsStarred(t *testing.T) {
+	path := t.TempDir() + "/old.db"
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE essays DROP COLUMN starred`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if db, err = openDB(path); err != nil {
+		t.Fatalf("reopen old db: %v", err)
+	}
+	defer db.Close()
+	var n int
+	_ = db.QueryRow(`SELECT count(*) FROM pragma_table_info('essays') WHERE name = 'starred'`).Scan(&n)
+	if n != 1 {
+		t.Fatal("starred column not added")
+	}
+}
