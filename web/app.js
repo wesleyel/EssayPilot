@@ -1213,6 +1213,19 @@ function bind() {
   });
 
   document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => { if (S.id) go(S.id, b.dataset.view); }));
+  const applyWide = (on) => {
+    document.body.classList.toggle('wide', on);
+    const wb = $('#wide-toggle');
+    wb.classList.toggle('on', on);
+    wb.setAttribute('aria-pressed', on);
+  };
+  applyWide(store.get('wide', '0') === '1');
+  $('#wide-toggle').addEventListener('click', () => {
+    const on = !document.body.classList.contains('wide');
+    store.set('wide', on ? '1' : '0');
+    applyWide(on);
+    if (S.detail && S.view === 'review') renderMarks();
+  });
   $('#expand-all').addEventListener('click', () => {
     S.expandAll = !S.expandAll;
     store.set('expandAll', S.expandAll ? '1' : '0');

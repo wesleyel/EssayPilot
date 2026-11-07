@@ -344,6 +344,7 @@ mark.m.hot { background: var(--mark-hot); }
 mark.m.k-highlight.hot { background: var(--mark-key-hot); }
 mark.k-mark { background: var(--mark-pen); }
 .pinfo-text mark.k-mark { color: inherit; }
+.wide-toggle.on { color: var(--color-accent-700); box-shadow: inset 0 0 0 1px var(--color-accent); }
 .pen-toggle.on { background: var(--color-accent-100); color: var(--color-accent-800); box-shadow: inset 0 0 0 1px var(--color-accent); }
 body.pen .pinfo, body.pen .pinfo-text { cursor: text; user-select: text; }
 body.pen .editor-wrap .ta, body.pen .reading { cursor: crosshair; }
@@ -554,6 +555,11 @@ body.no-essay .prompt-btns .btn { opacity: .45; pointer-events: none; }
 .hl-meta .lb { color: var(--color-accent-700); }
 .hl-empty { padding: 32px 0; text-align: center; color: var(--color-neutral-600); }
 #btn-highlights.on { color: var(--color-accent-700); border-color: var(--color-accent); }
+
+/* 宽屏模式：去掉页面最大宽度、收窄边距，正文栏随窗口伸展（放在响应式前，窄屏规则仍可覆盖内边距） */
+body.wide .sheet { max-width: none; padding-inline: 16px; }
+body.wide .desk { column-gap: 20px; grid-template-columns: minmax(130px, 260px) minmax(min(520px, 100%), 1fr) minmax(150px, 320px); }
+body.wide .desk.below { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------------------------------------------------------------- 响应式 */
 
